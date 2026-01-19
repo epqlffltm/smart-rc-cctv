@@ -1,0 +1,25 @@
+#.gitignore
+
+# 가상환경
+venv/
+
+# 파이썬 실행 시 생성되는 캐시 및 컴파일 파일
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 에디터 설정
+.vscode/
+.idea/
+
+# 시스템 파일 (맥/윈도우에서 자동 생성되는 파일)
+.DS_Store
+Thumbs.db
+
+# 배포/빌드 관련 (나중에 필요할 수 있음)
+dist/
+build/
+*.egg-info/
+
+에서 #.gitignore라고 하는건 내 습관인데 이 파일이 뭔지 알기 쉽도록 보여주려고 만든 거야

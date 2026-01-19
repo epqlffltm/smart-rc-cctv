@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PiCar-X Web Remote</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        .button { padding: 20px; font-size: 20px; width: 100px; margin: 5px; }
+        .container { text-align: center; margin-top: 50px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PiCar-X Control</h1>
+        <button class="button" onclick="sendCommand('forward')">Forward</button><br>
+        <button class="button" onclick="sendCommand('left')">Left</button>
+        <button class="button" onclick="sendCommand('stop')">Stop</button>
+        <button class="button" onclick="sendCommand('right')">Right</button><br>
+        <button class="button" onclick="sendCommand('backward')">Backward</button>
+    </div>
+
+    <script>
+        function sendCommand(cmd) {
+            fetch(`/control?command=${cmd}`);
+        }
+    </script>
+</body>
+</html>
