@@ -1,81 +1,78 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Picar-X 정밀 제어</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
+    <title>Picar-X 버튼 컨트롤러</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; }
-        #video-feed { width: 100%; max-width: 600px; margin-top: 10px; border: 2px solid #333; }
-        .ui-container { display: flex; justify-content: center; gap: 30px; padding: 20px; }
-        #joystick { width: 120px; height: 120px; background: #222; border-radius: 50%; position: relative; border: 2px solid #555; }
-        .panel { background: #222; padding: 15px; border-radius: 10px; }
-        button { padding: 10px; margin: 3px; width: 70px; background: #444; color: white; border: none; }
+        body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; touch-action: manipulation; }
+        #video-feed { width: 100%; max-width: 600px; margin-top: 5px; border: 2px solid #333; }
+        .ui-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px; }
+        .control-panel { background: #222; padding: 10px; border-radius: 15px; }
+        
+        /* 버튼 디자인 */
+        .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 180px; margin: 0 auto; }
+        .btn { padding: 20px 0; background: #444; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; user-select: none; }
+        .btn:active { background: #888; }
+        .btn-center { background: #555; }
+        .btn-rec { background: #900; grid-column: span 3; margin-top: 10px; padding: 10px; }
+        h3 { margin: 5px 0; font-size: 14px; color: #aaa; }
     </style>
 </head>
 <body>
-    <h3>Picar-X 정방향 제어</h3>
     <img id="video-feed" src="">
 
-    <div class="ui-container">
-        <div class="panel">
-            <strong>Camera</strong><br>
-            <button onclick="sendCam('up')">UP</button><br>
-            <button onclick="sendCam('center')">MID</button><br>
-            <button onclick="sendCam('down')">DOWN</button>
+    <div class="ui-grid">
+        <div class="control-panel">
+            <h3>DRIVE</h3>
+            <div class="d-pad">
+                <div></div>
+                <button class="btn" onmousedown="sendMove('forward')" onmouseup="sendMove('stop')" ontouchstart="sendMove('forward')" ontouchend="sendMove('stop')">▲</button>
+                <div></div>
+                <button class="btn" onmousedown="sendMove('left')" onmouseup="sendMove('stop')" ontouchstart="sendMove('left')" ontouchend="sendMove('stop')">◀</button>
+                <button class="btn btn-center" onclick="sendMove('stop')">■</button>
+                <button class="btn" onmousedown="sendMove('right')" onmouseup="sendMove('stop')" ontouchstart="sendMove('right')" ontouchend="sendMove('stop')">▶</button>
+                <div></div>
+                <button class="btn" onmousedown="sendMove('backward')" onmouseup="sendMove('stop')" ontouchstart="sendMove('backward')" ontouchend="sendMove('stop')">▼</button>
+                <div></div>
+            </div>
         </div>
 
-        <div class="panel">
-            <strong>Drive (Up=FWD / Down=BWD)</strong>
-            <div id="joystick"></div>
+        <div class="control-panel">
+            <h3>CAMERA</h3>
+            <div class="d-pad">
+                <div></div>
+                <button class="btn" onclick="sendCam('up')">UP</button>
+                <div></div>
+                <button class="btn" onclick="sendCam('left')">LEFT</button>
+                <button class="btn btn-center" onclick="sendCam('center')">MID</button>
+                <button class="btn" onclick="sendCam('right')">RIGHT</button>
+                <div></div>
+                <button class="btn" onclick="sendCam('down')">DOWN</button>
+                <div></div>
+            </div>
+            <button id="recBtn" class="btn btn-rec" onclick="toggleRecord()">REC START</button>
         </div>
     </div>
 
     <script>
         document.getElementById('video-feed').src = "http://" + window.location.hostname + ":9000/mjpg";
 
-        const JOY_SIZE = 80;
-        let lastSend = 0;
+        function sendMove(cmd) {
+            fetch(`/move?cmd=${cmd}`);
+        }
 
-        var joystick = nipplejs.create({
-            zone: document.getElementById('joystick'),
-            mode: 'static',
-            position: {left: '50%', top: '50%'},
-            color: 'lime',
-            size: JOY_SIZE,
-            // [개선] 클릭 오작동 방지를 위해 임계값을 더 높임
-            threshold: 0.3 
-        });
+        function sendCam(cmd) {
+            fetch(`/camera?cmd=${cmd}`);
+        }
 
-        joystick.on('move', function (evt, data) {
-            const now = Date.now();
-            if (now - lastSend < 80) return; 
-
-            // [개선] 거리가 15 이상 이동했을 때만 명령 전송 (클릭 시 튀는 현상 방지)
-            if (data.distance > 15) {
-                let force = Math.min((data.distance / (JOY_SIZE / 2)), 1.0);
-                
-                // [방향 교정] 위로 밀면(+), 아래로 당기면(-) 값이 나오도록 설정
-                // 사용하시는 하드웨어 특성에 따라 Math.sin 앞에 -를 붙이거나 뺄 수 있습니다.
-                // 현재 '아래로 당길 때 앞으로 간다'면, 아래 식의 Math.sin 앞에 마이너스(-)를 붙여야 합니다.
-                let speed = Math.round(Math.sin(data.angle.radian) * 50 * force);
-                
-                // 만약 여전히 반대라면 위 줄을 아래로 교체하세요:
-                // let speed = Math.round(-Math.sin(data.angle.radian) * 50 * force);
-
-                let angle = Math.round(Math.cos(data.angle.radian) * 35 * force);
-
-                fetch(`/control?speed=${speed}&angle=${angle}`);
-                lastSend = now;
-            }
-        });
-
-        joystick.on('end', function () {
-            // 손을 떼면 즉시 멈춤 신호
-            fetch(`/control?speed=0&angle=0`);
-        });
-
-        function sendCam(cmd) { fetch(`/camera?cmd=${cmd}`); }
+        let isRecording = false;
+        function toggleRecord() {
+            isRecording = !isRecording;
+            const btn = document.getElementById('recBtn');
+            btn.innerText = isRecording ? "REC STOP" : "REC START";
+            btn.style.background = isRecording ? "#444" : "#900";
+            fetch(`/record?status=${isRecording ? 'start' : 'stop'}`);
+        }
     </script>
 </body>
 </html>
