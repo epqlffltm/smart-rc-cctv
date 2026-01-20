@@ -17,8 +17,8 @@ px = Picarx()
 # 카메라 서보 초기 각도 설정 (중앙)
 pan_angle = 0  # 좌우
 tilt_angle = 0 # 상하
-px.set_camera_servo1_angle(pan_angle)
-px.set_camera_servo2_angle(tilt_angle)
+px.set_cam_pan_angle(pan_angle)
+px.set_cam_tilt_angle(tilt_angle)
 
 # --- 전역 변수 (영상 처리용) ---
 camera = None
@@ -112,9 +112,9 @@ def handle_camera(data):
     elif direction == 'center':
         pan_angle = 0
         tilt_angle = 0
-
-    px.set_camera_servo1_angle(pan_angle) # Picar-X 라이브러리에 따라 함수명이 다를 수 있음 (확인 필요)
-    px.set_camera_servo2_angle(tilt_angle)
+    
+    px.set_cam_pan_angle(pan_angle)
+    px.set_cam_tilt_angle(tilt_angle)
 
 # 3. 녹화 제어 처리
 @socketio.on('record_control')
