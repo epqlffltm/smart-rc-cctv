@@ -21,5 +21,3 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
-
-에서 #.gitignore라고 하는건 내 습관인데 이 파일이 뭔지 알기 쉽도록 보여주려고 만든 거야
