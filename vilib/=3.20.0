@@ -1,0 +1,2 @@
+Looking in indexes: https://pypi.org/simple, https://www.piwheels.org/simple
+Requirement already satisfied: protobuf in /usr/local/lib/python3.13/dist-packages (6.33.4)
