@@ -60,4 +60,39 @@
 
         joystick.on('move', function (evt, data) {
             const now = Date.now();
-            if (now - lastSend < 70) return
+            if (now - lastSend < 70) return;
+
+            if (data.distance) {
+                let force = Math.min((data.distance / (JOY_SIZE / 2)) * 1.5, 1.0);
+                
+                // [수정됨] 전후진 방향 반전 (앞으로 밀면 양수, 뒤로 당기면 음수)
+                // Math.sin 값에 마이너스(-)를 붙여 좌표계를 뒤집습니다.
+                let speed = Math.round(-Math.sin(data.angle.radian) * 50 * force);
+                
+                // 좌우 방향은 그대로 유지 (오른쪽 양수, 왼쪽 음수)
+                let angle = Math.round(Math.cos(data.angle.radian) * 35 * force);
+
+                fetch(`/control?speed=${speed}&angle=${angle}`);
+                lastSend = now;
+            }
+        });
+
+        joystick.on('end', function () {
+            fetch(`/control?speed=0&angle=0`);
+        });
+
+        function sendCam(cmd) {
+            fetch(`/camera?cmd=${cmd}`);
+        }
+
+        let isRec = false;
+        function toggleRecord() {
+            isRec = !isRec;
+            const btn = document.getElementById('recBtn');
+            btn.innerText = isRec ? "STOP" : "REC";
+            btn.classList.toggle('active');
+            fetch(`/record?status=${isRec ? 'start' : 'stop'}`);
+        }
+    </script>
+</body>
+</html>

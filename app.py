@@ -87,3 +87,4 @@ if __name__ == '__main__':
         app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
     finally:
         px.stop()
+        # Vilib.camera_close()는 생략하여 종료 시 에러 방지
