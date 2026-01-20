@@ -6,16 +6,18 @@ from time import strftime, localtime
 
 app = Flask(__name__)
 
-# Picar-X 및 카메라 초기화
+# 전역 변수로 Picarx 객체 생성
 px = Picarx()
-Vilib.camera_start(vflip=False, hflip=False)
-Vilib.display(local=False, web=True) # 웹 스트리밍 활성화 (포트 9000)
 
-# 현재 카메라 각도 상태 저장
+def init_camera():
+    # 카메라 시작 시 local=False로 설정하여 GUI 에러 방지
+    Vilib.camera_start(vflip=False, hflip=False)
+    Vilib.display(local=False, web=True) # 웹 스트리밍만 활성화
+
+# 초기 상태 설정
 current_pan = 0
 current_tilt = 0
 rec_status = 'stop'
-vname = ""
 
 @app.route('/')
 def index():
@@ -26,15 +28,10 @@ def move():
     data = request.json
     angle = data.get('angle', 0)
     speed = data.get('speed', 0)
-    
-    # 조이스틱 각도와 속도를 이용해 조향 및 주행 제어
     px.set_dir_servo_angle(angle)
-    if speed > 0:
-        px.forward(speed)
-    elif speed < 0:
-        px.backward(abs(speed))
-    else:
-        px.stop()
+    if speed > 0: px.forward(speed)
+    elif speed < 0: px.backward(abs(speed))
+    else: px.stop()
     return jsonify(status="success")
 
 @app.route('/camera', methods=['POST'])
@@ -42,36 +39,31 @@ def camera_control():
     global current_pan, current_tilt
     data = request.json
     action = data.get('action')
-    
     if action == 'left': current_pan += 5
     elif action == 'right': current_pan -= 5
     elif action == 'up': current_tilt -= 5
     elif action == 'down': current_tilt += 5
-    elif action == 'center': 
-        current_pan = 0
-        current_tilt = 0
-
-    # 각도 제한 (-35 ~ 35)
+    elif action == 'center': current_pan, current_tilt = 0, 0
+    
     current_pan = max(min(current_pan, 35), -35)
     current_tilt = max(min(current_tilt, 35), -35)
-    
     px.set_cam_pan_angle(current_pan)
     px.set_cam_tilt_angle(current_tilt)
     return jsonify(pan=current_pan, tilt=current_tilt)
 
 @app.route('/record', methods=['POST'])
 def record_video():
-    global rec_status, vname
+    global rec_status
     username = os.getlogin()
-    Vilib.rec_video_set["path"] = f"/home/{username}/Videos/"
+    Vilib.rec_video_set["path"] = f"/home/{username}/Videos/" #
 
     if rec_status == 'stop':
         rec_status = 'start'
-        vname = strftime("%Y-%m-%d-%H.%M.%S", localtime())
+        vname = strftime("%Y-%m-%d-%H.%M.%S", localtime()) #
         Vilib.rec_video_set["name"] = vname
         Vilib.rec_video_run()
         Vilib.rec_video_start()
-        return jsonify(status="recording", file=vname)
+        return jsonify(status="recording")
     else:
         rec_status = 'stop'
         Vilib.rec_video_stop()
@@ -79,7 +71,9 @@ def record_video():
 
 if __name__ == '__main__':
     try:
-        app.run(host='0.0.0.0', port=5000)
+        init_camera()
+        # debug=False와 use_reloader=False를 사용하여 프로세스 중복 실행 방지
+        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
     finally:
         px.stop()
         Vilib.camera_close()
