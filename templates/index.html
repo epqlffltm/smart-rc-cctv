@@ -1,38 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PiCar-X Smart Control</title>
+    <title>Picar-X 정밀 제어</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
     <style>
-        /* 스타일은 기존과 동일합니다 */
-        body { text-align: center; font-family: sans-serif; background: #1a1a1a; color: white; margin: 0; padding: 20px; }
-        #video-feed { width: 90%; max-width: 640px; border: 3px solid #333; border-radius: 10px; }
-        .main-ui { display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; margin-top: 20px; }
-        #joystick { width: 120px; height: 120px; background: #333; border-radius: 50%; position: relative; border: 2px solid #555; }
-        .panel { background: #2a2a2a; padding: 15px; border-radius: 15px; min-width: 150px; }
-        button { padding: 12px; margin: 5px; width: 80px; cursor: pointer; border-radius: 8px; border: none; background: #444; color: white; font-weight: bold; }
-        button:active { background: #666; }
-        .btn-rec { background: #c62828; width: 100%; margin-top: 10px; }
-        .btn-rec.active { background: #454545; }
+        body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; }
+        #video-feed { width: 100%; max-width: 600px; margin-top: 10px; border-radius: 10px; }
+        .ui-container { display: flex; justify-content: center; gap: 40px; padding: 20px; }
+        /* 조이스틱 영역을 더 작게 시각화 */
+        #joystick { width: 100px; height: 100px; background: #222; border-radius: 50%; position: relative; border: 2px solid #444; }
+        .panel { background: #222; padding: 15px; border-radius: 10px; }
+        button { padding: 10px; margin: 3px; width: 70px; cursor: pointer; background: #333; color: white; border: 1px solid #555; }
+        .btn-rec { background: #900; width: 100%; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h2>PiCar-X Smart Control</h2>
+    <h3>Picar-X Real-time Control</h3>
     <img id="video-feed" src="">
 
-    <div class="main-ui">
+    <div class="ui-container">
         <div class="panel">
-            <h3>Camera</h3>
+            <strong>Camera</strong><br>
             <button onclick="sendCam('up')">UP</button><br>
             <button onclick="sendCam('left')">LEFT</button>
-            <button onclick="sendCam('center')">CENTER</button>
+            <button onclick="sendCam('center')">MID</button>
             <button onclick="sendCam('right')">RIGHT</button><br>
             <button onclick="sendCam('down')">DOWN</button>
             <button id="recBtn" class="btn-rec" onclick="toggleRecord()">REC</button>
         </div>
+
         <div class="panel">
-            <h3>Movement</h3>
+            <strong>Drive</strong>
             <div id="joystick"></div>
         </div>
     </div>
@@ -40,40 +39,34 @@
     <script>
         document.getElementById('video-feed').src = "http://" + window.location.hostname + ":9000/mjpg";
 
-        const JOY_SIZE = 100;
-        let lastSend = 0;
+        const JOY_SIZE = 60; // 조이스틱 반경을 극도로 좁힘 (민감도 폭발)
+        let lastTime = 0;
 
         var joystick = nipplejs.create({
             zone: document.getElementById('joystick'),
             mode: 'static',
             position: {left: '50%', top: '50%'},
-            color: 'red',
+            color: 'cyan',
             size: JOY_SIZE,
-            // [수정됨] 임계값을 높여 클릭 시 오작동 방지
-            threshold: 0.2 
-        });
-
-        // [추가됨] 조작 시작 시 안전하게 정지 신호 전송
-        joystick.on('start', function() {
-            fetch(`/control?speed=0&angle=0`);
+            threshold: 0.1
         });
 
         joystick.on('move', function (evt, data) {
             const now = Date.now();
-            if (now - lastSend < 70) return;
+            if (now - lastTime < 50) return; // 0.05초 간격 전송
 
             if (data.distance) {
-                let force = Math.min((data.distance / (JOY_SIZE / 2)) * 1.5, 1.0);
+                // 마우스 이동 거리에 따른 속도 비율 (최대 1.0)
+                let force = Math.min((data.distance / (JOY_SIZE / 2)) * 2.0, 1.0);
                 
-                // [수정됨] 전후진 방향 반전 (앞으로 밀면 양수, 뒤로 당기면 음수)
-                // Math.sin 값에 마이너스(-)를 붙여 좌표계를 뒤집습니다.
-                let speed = Math.round(-Math.sin(data.angle.radian) * 50 * force);
+                // [방향 일치] Sin(radian) 사용: 위로 밀면(+), 아래로 당기면(-)
+                let speed = Math.round(Math.sin(data.angle.radian) * 50 * force);
                 
-                // 좌우 방향은 그대로 유지 (오른쪽 양수, 왼쪽 음수)
+                // [방향 일치] Cos(radian) 사용: 오른쪽(+), 왼쪽(-)
                 let angle = Math.round(Math.cos(data.angle.radian) * 35 * force);
 
                 fetch(`/control?speed=${speed}&angle=${angle}`);
-                lastSend = now;
+                lastTime = now;
             }
         });
 
@@ -81,17 +74,13 @@
             fetch(`/control?speed=0&angle=0`);
         });
 
-        function sendCam(cmd) {
-            fetch(`/camera?cmd=${cmd}`);
-        }
+        function sendCam(cmd) { fetch(`/camera?cmd=${cmd}`); }
 
-        let isRec = false;
+        let rec = false;
         function toggleRecord() {
-            isRec = !isRec;
-            const btn = document.getElementById('recBtn');
-            btn.innerText = isRec ? "STOP" : "REC";
-            btn.classList.toggle('active');
-            fetch(`/record?status=${isRec ? 'start' : 'stop'}`);
+            rec = !rec;
+            document.getElementById('recBtn').innerText = rec ? "STOP" : "REC";
+            fetch(`/record?status=${rec ? 'start' : 'stop'}`);
         }
     </script>
 </body>
