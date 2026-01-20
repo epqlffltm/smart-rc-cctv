@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PiCar-X 통합 제어판</title>
+    <title>PiCar-X Smart Control</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
     <style>
+        /* 스타일은 기존과 동일합니다 */
         body { text-align: center; font-family: sans-serif; background: #1a1a1a; color: white; margin: 0; padding: 20px; }
         #video-feed { width: 90%; max-width: 640px; border: 3px solid #333; border-radius: 10px; }
         .main-ui { display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; margin-top: 20px; }
@@ -30,7 +31,6 @@
             <button onclick="sendCam('down')">DOWN</button>
             <button id="recBtn" class="btn-rec" onclick="toggleRecord()">REC</button>
         </div>
-
         <div class="panel">
             <h3>Movement</h3>
             <div id="joystick"></div>
@@ -38,10 +38,9 @@
     </div>
 
     <script>
-        // 비디오 피드 연결
         document.getElementById('video-feed').src = "http://" + window.location.hostname + ":9000/mjpg";
 
-        const JOY_SIZE = 100; // 조이스틱 크기 축소 (민감도 향상)
+        const JOY_SIZE = 100;
         let lastSend = 0;
 
         var joystick = nipplejs.create({
@@ -50,43 +49,15 @@
             position: {left: '50%', top: '50%'},
             color: 'red',
             size: JOY_SIZE,
-            threshold: 0.1
+            // [수정됨] 임계값을 높여 클릭 시 오작동 방지
+            threshold: 0.2 
+        });
+
+        // [추가됨] 조작 시작 시 안전하게 정지 신호 전송
+        joystick.on('start', function() {
+            fetch(`/control?speed=0&angle=0`);
         });
 
         joystick.on('move', function (evt, data) {
             const now = Date.now();
-            if (now - lastSend < 70) return; // 통신 과부하 방지 (70ms)
-
-            if (data.distance) {
-                // 민감도 가중치: 조금만 움직여도 큰 값 전달
-                let force = Math.min((data.distance / (JOY_SIZE / 2)) * 1.5, 1.0);
-                
-                // Y축(전후진): 위가 양수(+), 아래가 음수(-)
-                let speed = Math.round(Math.sin(data.angle.radian) * 50 * force);
-                // X축(좌우): 오른쪽이 양수(+), 왼쪽이 음수(-)
-                let angle = Math.round(Math.cos(data.angle.radian) * 35 * force);
-
-                fetch(`/control?speed=${speed}&angle=${angle}`);
-                lastSend = now;
-            }
-        });
-
-        joystick.on('end', function () {
-            fetch(`/control?speed=0&angle=0`);
-        });
-
-        function sendCam(cmd) {
-            fetch(`/camera?cmd=${cmd}`);
-        }
-
-        let isRec = false;
-        function toggleRecord() {
-            isRec = !isRec;
-            const btn = document.getElementById('recBtn');
-            btn.innerText = isRec ? "STOP" : "REC";
-            btn.classList.toggle('active');
-            fetch(`/record?status=${isRec ? 'start' : 'stop'}`);
-        }
-    </script>
-</body>
-</html>
+            if (now - lastSend < 70) return

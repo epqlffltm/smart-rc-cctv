@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from picarx import Picarx  # 제공된 파일 기준 lowercase 'x' 사용
+from picarx import Picarx
 from vilib import Vilib
 import os
 from time import strftime, localtime
@@ -8,8 +8,11 @@ app = Flask(__name__)
 
 # Picar-X 및 카메라 초기화
 px = Picarx()
-Vilib.camera_start(vflip=False, hflip=False)
-Vilib.display(local=False, web=True)  # 포트 9000번 스트리밍 활성화
+try:
+    Vilib.camera_start(vflip=False, hflip=False)
+    Vilib.display(local=False, web=True)
+except Exception as e:
+    print(f"카메라 초기화 중 경고(무시 가능): {e}")
 
 # 상태 변수
 current_pan = 0
@@ -22,30 +25,31 @@ def index():
 
 @app.route('/control')
 def control():
+    # 속도와 각도를 받아옵니다.
     speed = int(request.args.get('speed', 0))
     angle = int(request.args.get('angle', 0))
     
-    # 좌우 반전 해결: 전달받은 angle에 -1을 곱함
-    fixed_angle = -angle 
-    px.set_dir_servo_angle(fixed_angle)
+    # [수정됨] 좌우 반전 로직 제거 (angle 값 그대로 사용)
+    px.set_dir_servo_angle(angle)
     
     if speed >= 0:
         px.forward(speed)
     else:
-        px.backward(abs(speed))
+        px.backward(abs(speed)) # 음수면 절댓값으로 후진
     return "OK"
 
 @app.route('/camera')
 def camera_control():
     global current_pan, current_tilt
     cmd = request.args.get('cmd')
-    
-    # 카메라 각도 조절
     step = 10
-    if cmd == 'up': current_tilt -= step
-    elif cmd == 'down': current_tilt += step
-    elif cmd == 'left': current_pan += step
-    elif cmd == 'right': current_pan -= step
+    
+    # [수정됨] 카메라 방향 정방향으로 수정
+    # Picar-X 기준: 각도가 커지면 위/왼쪽, 작아지면 아래/오른쪽
+    if cmd == 'up': current_tilt += step      # 증가(+)로 변경
+    elif cmd == 'down': current_tilt -= step  # 감소(-)로 변경
+    elif cmd == 'left': current_pan += step   # 증가(+)로 변경
+    elif cmd == 'right': current_pan -= step  # 감소(-)로 변경
     elif cmd == 'center': current_pan, current_tilt = 0, 0
 
     # 각도 제한 (-35 ~ 35)
@@ -56,6 +60,7 @@ def camera_control():
     px.set_cam_tilt_angle(current_tilt)
     return jsonify(pan=current_pan, tilt=current_tilt)
 
+# ... (녹화 기능 /record는 기존과 동일합니다) ...
 @app.route('/record')
 def record():
     global rec_status
@@ -78,7 +83,5 @@ def record():
 
 if __name__ == '__main__':
     try:
-        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
-    finally:
-        px.stop()
-        V
+        # use_reloader=False로 카메라 중복 점유 방지
+        app.run(host='0.0.0.0
