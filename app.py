@@ -48,11 +48,11 @@ def camera_control():
     cmd = request.args.get('cmd')
     step = 10
     
-    # [방향 교정] 사용자 피드백 반영하여 반대로 수정
+    # [방향 교정]
     if cmd == 'up': current_tilt -= step      # 위로 (반대면 += 로 수정)
     elif cmd == 'down': current_tilt += step  # 아래로
-    elif cmd == 'left': current_pan -= step   # 왼쪽
-    elif cmd == 'right': current_pan += step  # 오른쪽
+    elif cmd == 'left': current_pan += step   # 왼쪽
+    elif cmd == 'right': current_pan -= step  # 오른쪽
     elif cmd == 'center': current_pan, current_tilt = 0, 0
 
     current_pan = max(min(current_pan, 35), -35)
