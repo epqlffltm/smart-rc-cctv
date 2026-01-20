@@ -109,12 +109,18 @@
         const recordBtn = document.getElementById('recordBtn');
         const recIndicator = document.getElementById('record-indicator');
         let isRecording = false;
-
+        
         // 서버로부터 영상 데이터 수신
         socket.on('video_frame', function(data) {
-            // 바이너리 데이터를 blob으로 변환하여 이미지 src에 할당
-            const blob = new Blob([data.image], { type: 'image/jpeg' });
-            videoImg.src = URL.createObjectURL(blob);
+            if (data.image) {
+                const blob = new Blob([data.image], { type: 'image/jpeg' });
+                // 이전 URL을 해제하여 메모리 누수를 방지합니다.
+                const oldUrl = videoImg.src;
+                videoImg.src = URL.createObjectURL(blob);
+                if (oldUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(oldUrl);
+                }
+            }
         });
 
         // 녹화 상태 변경 알림 수신

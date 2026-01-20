@@ -5,70 +5,90 @@ import cv2
 import threading
 import time
 import os
+import sqlite3
 from datetime import datetime
 
-# --- 설정 ---
+# --- [설정 및 DB 초기화] ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret_picarx_key' # 보안 키 (임의 설정)
+app.config['SECRET_KEY'] = 'picarx_secret'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-# --- 하드웨어 초기화 ---
+DB_FILE = 'smart_rc.db'
+
+def init_db():
+    """로그를 저장할 테이블이 없으면 생성합니다."""
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute('''CREATE TABLE IF NOT EXISTS control_logs 
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                      timestamp TEXT, 
+                      category TEXT, 
+                      action TEXT, 
+                      details TEXT)''')
+    print("✅ SQLite 데이터베이스 준비 완료")
+
+def log_event(category, action, details=""):
+    """이벤트를 DB에 기록합니다."""
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute("INSERT INTO logs (timestamp, category, action, details) VALUES (?, ?, ?, ?)",
+                         (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), category, action, str(details)))
+    except:
+        pass # 로그 기록 실패가 메인 로직에 영향을 주지 않도록 함
+
+# --- [하드웨어 초기화] ---
 px = Picarx()
-# 카메라 서보 초기 각도 설정 (중앙)
-pan_angle = 0  # 좌우
-tilt_angle = 0 # 상하
+pan_angle, tilt_angle = 0, 0
 px.set_cam_pan_angle(pan_angle)
 px.set_cam_tilt_angle(tilt_angle)
 
-# --- 전역 변수 (영상 처리용) ---
-camera = None
+# --- [전역 변수] ---
 is_recording = False
 video_writer = None
-output_dir = os.path.join(os.getcwd(), 'recordings')
+output_dir = 'recordings'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
-# --- 백그라운드 스레드: 영상 캡처 및 스트리밍 ---
+# --- [카메라 스트리밍 스레드] ---
 def frame_stream():
-    global camera, is_recording, video_writer
-    camera = cv2.VideoCapture(0) # 0번 카메라 장치 열기
-    # 해상도 설정 (너무 높으면 렉 유발, 적절히 타협)
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    global is_recording, video_writer
+    # 중요: CAP_V4L2 옵션을 주어 리눅스 카메라 장치를 명확히 지정합니다.
+    camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
+    
+    # 해상도를 살짝 낮춰 전송 속도를 확보합니다.
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 480)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 320)
 
+    if not camera.isOpened():
+        print("❌ 카메라를 열 수 없습니다! 케이블 연결이나 Legacy 설정을 확인하세요.")
+        return
+
+    print("✅ 카메라 스트리밍 시작")
     while True:
         success, frame = camera.read()
         if not success:
-            time.sleep(0.1)
             continue
 
-        # 1. 녹화 중이면 파일에 쓰기
-        if is_recording and video_writer is not None:
+        # 녹화 처리
+        if is_recording and video_writer:
             video_writer.write(frame)
-            # 녹화 중임을 화면에 표시 (빨간 원)
-            cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
 
-        # 2. 웹 전송을 위해 JPEG로 인코딩
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame_bytes = buffer.tobytes()
-
-        # 3. 웹소켓으로 데이터 전송 (바이너리 데이터)
-        socketio.emit('video_frame', {'image': frame_bytes}, namespace='/')
+        # 이미지 인코딩 및 전송
+        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if ret:
+            socketio.emit('video_frame', {'image': buffer.tobytes()})
         
-        # 과부하 방지 딜레이 (약 20~30 FPS 목표)
-        time.sleep(0.04)
+        socketio.sleep(0.04) # 약 25 FPS
 
-# --- 웹소켓 이벤트 핸들러 ---
+# --- [웹소켓 이벤트 핸들러] ---
 
 @socketio.on('connect')
-def connect():
-    print("클라이언트 접속 연결됨")
-    # 첫 접속 시 영상 스트리밍 스레드 시작 (하나만 실행되도록 체크)
-    if threading.active_count() < 3: # 메인 스레드 + 소켓 스레드 외에 없으면
+def handle_connect():
+    print("사용자 접속됨")
+    # 스레드가 이미 돌아가고 있는지 확인 후 시작
+    if threading.active_count() < 3:
         t = threading.Thread(target=frame_stream, daemon=True)
         t.start()
 
-# 1. 조이스틱 제어 처리 (웹소켓 버전)
 @socketio.on('move_control')
 def handle_move(data):
     angle = data.get('angle')
@@ -78,58 +98,44 @@ def handle_move(data):
     if command == 'stop':
         px.stop()
         px.set_dir_servo_angle(0)
+        log_event("MOVE", "STOP")
         return
 
     if angle is not None and distance is not None:
-        speed = int(distance * 1.5) # 속도 보정
-        if speed > 100: speed = 100
-        
-        steering = 0
-        if 0 <= angle <= 180: # 전진
-            steering = (90 - angle) * 0.6
-            px.set_dir_servo_angle(steering)
-            px.forward(speed)
-        elif 181 <= angle <= 360: # 후진
-            steering = (angle - 270) * 0.6
-            px.set_dir_servo_angle(steering)
-            px.backward(speed)
+        speed = min(int(distance * 1.5), 100)
+        steering = (90 - angle) * 0.6 if 0 <= angle <= 180 else (angle - 270) * 0.6
+        px.set_dir_servo_angle(steering)
+        if 0 <= angle <= 180: px.forward(speed)
+        else: px.backward(speed)
 
-# 2. 카메라 서보 제어 처리
 @socketio.on('camera_control')
 def handle_camera(data):
     global pan_angle, tilt_angle
     direction = data.get('direction')
-    step = 5 # 한 번 누를 때 움직일 각도
+    step = 5
 
-    if direction == 'up':
-        tilt_angle = max(-45, tilt_angle - step) # 각도 제한 필요
-    elif direction == 'down':
-        tilt_angle = min(45, tilt_angle + step)
-    elif direction == 'left':
-        pan_angle = min(90, pan_angle + step)
-    elif direction == 'right':
-        pan_angle = max(-90, pan_angle - step)
-    elif direction == 'center':
-        pan_angle = 0
-        tilt_angle = 0
+    if direction == 'up': tilt_angle = max(-45, tilt_angle - step)
+    elif direction == 'down': tilt_angle = min(45, tilt_angle + step)
+    elif direction == 'left': pan_angle = min(90, pan_angle + step)
+    elif direction == 'right': pan_angle = max(-90, pan_angle - step)
+    elif direction == 'center': pan_angle, tilt_angle = 0, 0
         
     px.set_cam_pan_angle(pan_angle)
     px.set_cam_tilt_angle(tilt_angle)
+    log_event("CAMERA", "ROTATE", f"pan:{pan_angle}, tilt:{tilt_angle}")
 
-# 3. 녹화 제어 처리
 @socketio.on('record_control')
 def handle_record(data):
     global is_recording, video_writer
     action = data.get('action')
 
     if action == 'start' and not is_recording:
-        filename = datetime.now().strftime("%Y%m%d_%H%M%S") + ".avi"
+        filename = f"rec_{datetime.now().strftime('%H%M%S')}.avi"
         filepath = os.path.join(output_dir, filename)
-        # VideoWriter 설정 (코덱, FPS, 해상도)
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        video_writer = cv2.VideoWriter(filepath, fourcc, 20.0, (640, 480))
+        video_writer = cv2.VideoWriter(filepath, fourcc, 20.0, (480, 320))
         is_recording = True
-        print(f"녹화 시작: {filepath}")
+        log_event("RECORD", "START", filename)
         emit('record_status', {'status': 'recording'})
         
     elif action == 'stop' and is_recording:
@@ -137,20 +143,13 @@ def handle_record(data):
         if video_writer:
             video_writer.release()
             video_writer = None
-        print("녹화 종료")
+        log_event("RECORD", "STOP")
         emit('record_status', {'status': 'stopped'})
 
-
-# --- Flask 라우트 ---
 @app.route('/')
 def index():
     return render_template('index.html')
 
 if __name__ == "__main__":
-    try:
-        # app.run 대신 socketio.run 사용
-        socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
-    finally:
-        px.stop()
-        if camera: camera.release()
-        if video_writer: video_writer.release()
+    init_db()
+    socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
