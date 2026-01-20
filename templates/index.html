@@ -6,32 +6,27 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
     <style>
         body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; }
-        #video-feed { width: 100%; max-width: 600px; margin-top: 10px; border-radius: 10px; }
-        .ui-container { display: flex; justify-content: center; gap: 40px; padding: 20px; }
-        /* 조이스틱 영역을 더 작게 시각화 */
-        #joystick { width: 100px; height: 100px; background: #222; border-radius: 50%; position: relative; border: 2px solid #444; }
+        #video-feed { width: 100%; max-width: 600px; margin-top: 10px; border: 2px solid #333; }
+        .ui-container { display: flex; justify-content: center; gap: 30px; padding: 20px; }
+        #joystick { width: 120px; height: 120px; background: #222; border-radius: 50%; position: relative; border: 2px solid #555; }
         .panel { background: #222; padding: 15px; border-radius: 10px; }
-        button { padding: 10px; margin: 3px; width: 70px; cursor: pointer; background: #333; color: white; border: 1px solid #555; }
-        .btn-rec { background: #900; width: 100%; margin-top: 10px; }
+        button { padding: 10px; margin: 3px; width: 70px; background: #444; color: white; border: none; }
     </style>
 </head>
 <body>
-    <h3>Picar-X Real-time Control</h3>
+    <h3>Picar-X 정방향 제어</h3>
     <img id="video-feed" src="">
 
     <div class="ui-container">
         <div class="panel">
             <strong>Camera</strong><br>
             <button onclick="sendCam('up')">UP</button><br>
-            <button onclick="sendCam('left')">LEFT</button>
-            <button onclick="sendCam('center')">MID</button>
-            <button onclick="sendCam('right')">RIGHT</button><br>
+            <button onclick="sendCam('center')">MID</button><br>
             <button onclick="sendCam('down')">DOWN</button>
-            <button id="recBtn" class="btn-rec" onclick="toggleRecord()">REC</button>
         </div>
 
         <div class="panel">
-            <strong>Drive</strong>
+            <strong>Drive (Up=FWD / Down=BWD)</strong>
             <div id="joystick"></div>
         </div>
     </div>
@@ -39,49 +34,48 @@
     <script>
         document.getElementById('video-feed').src = "http://" + window.location.hostname + ":9000/mjpg";
 
-        const JOY_SIZE = 60; // 조이스틱 반경을 극도로 좁힘 (민감도 폭발)
-        let lastTime = 0;
+        const JOY_SIZE = 80;
+        let lastSend = 0;
 
         var joystick = nipplejs.create({
             zone: document.getElementById('joystick'),
             mode: 'static',
             position: {left: '50%', top: '50%'},
-            color: 'cyan',
+            color: 'lime',
             size: JOY_SIZE,
-            threshold: 0.1
+            // [개선] 클릭 오작동 방지를 위해 임계값을 더 높임
+            threshold: 0.3 
         });
 
         joystick.on('move', function (evt, data) {
             const now = Date.now();
-            if (now - lastTime < 50) return; // 0.05초 간격 전송
+            if (now - lastSend < 80) return; 
 
-            if (data.distance) {
-                // 마우스 이동 거리에 따른 속도 비율 (최대 1.0)
-                let force = Math.min((data.distance / (JOY_SIZE / 2)) * 2.0, 1.0);
+            // [개선] 거리가 15 이상 이동했을 때만 명령 전송 (클릭 시 튀는 현상 방지)
+            if (data.distance > 15) {
+                let force = Math.min((data.distance / (JOY_SIZE / 2)), 1.0);
                 
-                // [방향 일치] Sin(radian) 사용: 위로 밀면(+), 아래로 당기면(-)
+                // [방향 교정] 위로 밀면(+), 아래로 당기면(-) 값이 나오도록 설정
+                // 사용하시는 하드웨어 특성에 따라 Math.sin 앞에 -를 붙이거나 뺄 수 있습니다.
+                // 현재 '아래로 당길 때 앞으로 간다'면, 아래 식의 Math.sin 앞에 마이너스(-)를 붙여야 합니다.
                 let speed = Math.round(Math.sin(data.angle.radian) * 50 * force);
                 
-                // [방향 일치] Cos(radian) 사용: 오른쪽(+), 왼쪽(-)
+                // 만약 여전히 반대라면 위 줄을 아래로 교체하세요:
+                // let speed = Math.round(-Math.sin(data.angle.radian) * 50 * force);
+
                 let angle = Math.round(Math.cos(data.angle.radian) * 35 * force);
 
                 fetch(`/control?speed=${speed}&angle=${angle}`);
-                lastTime = now;
+                lastSend = now;
             }
         });
 
         joystick.on('end', function () {
+            // 손을 떼면 즉시 멈춤 신호
             fetch(`/control?speed=0&angle=0`);
         });
 
         function sendCam(cmd) { fetch(`/camera?cmd=${cmd}`); }
-
-        let rec = false;
-        function toggleRecord() {
-            rec = !rec;
-            document.getElementById('recBtn').innerText = rec ? "STOP" : "REC";
-            fetch(`/record?status=${rec ? 'start' : 'stop'}`);
-        }
     </script>
 </body>
 </html>
