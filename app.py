@@ -49,13 +49,13 @@ def camera_control():
     
     # [방향 교정 완료] 좌우 방향을 반대로 수정했습니다.
     if cmd == 'up': 
-        current_tilt -= step
-    elif cmd == 'down': 
         current_tilt += step
+    elif cmd == 'down': 
+        current_tilt -= step
     elif cmd == 'left': 
-        current_pan += step
-    elif cmd == 'right': 
         current_pan -= step
+    elif cmd == 'right': 
+        current_pan += step
     elif cmd == 'center': 
         current_pan, current_tilt = 0, 0
 
