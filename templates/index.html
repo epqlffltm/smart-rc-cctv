@@ -1,18 +1,169 @@
-<div class="main-container">
-    <div class="video-section">
-        <img id="video-stream" src="" style="width: 100%; height: auto; background: #333;">
-        <div id="record-indicator" style="position: absolute; color: red; display: none;">● REC</div>
-    </div>
-    <div class="control-section" style="display: flex; justify-content: space-around; align-items: center; padding: 20px;">
-        <div id="joystick-zone" style="width: 150px; height: 150px;"></div>
-        <div class="cam-controls">
-            <button onclick="moveCam('up')">▲</button><br>
-            <button onclick="moveCam('left')">◀</button>
-            <button onclick="moveCam('center')">●</button>
-            <button onclick="moveCam('right')">▶</button><br>
-            <button onclick="moveCam('down')">▼</button>
-            <hr>
-            <button id="recBtn" onclick="toggleRecord()" style="background: red; color: white;">Start Recording</button>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PiCar-X Smart Controller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        /* --- 레이아웃 --- */
+        body { margin: 0; background: #222; font-family: sans-serif; color: white; overflow: hidden; }
+        .main-container {
+            display: grid;
+            grid-template-rows: 60% 40%; /* 상단 영상 60%, 하단 컨트롤 40% */
+            height: 100vh;
+        }
+
+        /* --- 영상 구역 --- */
+        .video-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            position: relative;
+        }
+        #video-stream {
+            max-width: 100%;
+            max-height: 100%;
+            border: 2px solid #444;
+        }
+        #record-indicator {
+            position: absolute; top: 20px; right: 20px; color: red; font-weight: bold; display: none;
+        }
+
+        /* --- 하단 컨트롤 구역 --- */
+        .control-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* 좌우 1:1 분할 */
+            background: #333;
+        }
+        .joystick-area {
+            position: relative;
+            border-right: 1px solid #555;
+        }
+        #joystick-zone {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 150px; height: 150px;
+            background: rgba(255,255,255,0.1); border-radius: 50%;
+        }
+
+        /* --- 카메라 및 녹화 버튼 구역 --- */
+        .cam-btn-area {
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center; gap: 10px;
+        }
+        .d-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 50px);
+            grid-template-rows: repeat(3, 50px);
+            gap: 5px;
+        }
+        .btn {
+            background: #555; border: none; color: white; font-size: 20px; border-radius: 5px; cursor: pointer;
+        }
+        .btn:active { background: #777; }
+        .rec-btn {
+            width: 160px; padding: 10px; font-weight: bold;
+            background: #d9534f; /* 빨간색 */
+        }
+        .rec-btn.recording { background: #c9302c; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
+
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="video-section">
+            <img id="video-stream" src="" alt="Connecting to Camera...">
+            <div id="record-indicator">● REC</div>
+        </div>
+
+        <div class="control-section">
+            <div class="joystick-area">
+                <div id="joystick-zone"></div>
+            </div>
+            
+            <div class="cam-btn-area">
+                <div class="d-pad">
+                    <div></div>
+                    <button class="btn" onclick="moveCam('up')">▲</button>
+                    <div></div>
+                    <button class="btn" onclick="moveCam('left')">◀</button>
+                    <button class="btn" onclick="moveCam('center')">●</button>
+                    <button class="btn" onclick="moveCam('right')">▶</button>
+                    <div></div>
+                    <button class="btn" onclick="moveCam('down')">▼</button>
+                    <div></div>
+                </div>
+                <button id="recordBtn" class="btn rec-btn" onclick="toggleRecord()">Start Recording</button>
+            </div>
         </div>
     </div>
-</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.1/nipplejs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+
+    <script>
+        // 1. 웹소켓 연결
+        const socket = io();
+        const videoImg = document.getElementById('video-stream');
+        const recordBtn = document.getElementById('recordBtn');
+        const recIndicator = document.getElementById('record-indicator');
+        let isRecording = false;
+
+        // 서버로부터 영상 데이터 수신
+        socket.on('video_frame', function(data) {
+            // 바이너리 데이터를 blob으로 변환하여 이미지 src에 할당
+            const blob = new Blob([data.image], { type: 'image/jpeg' });
+            videoImg.src = URL.createObjectURL(blob);
+        });
+
+        // 녹화 상태 변경 알림 수신
+        socket.on('record_status', function(data) {
+            if (data.status === 'recording') {
+                isRecording = true;
+                recordBtn.innerText = 'Stop Recording';
+                recordBtn.classList.add('recording');
+                recIndicator.style.display = 'block';
+            } else {
+                isRecording = false;
+                recordBtn.innerText = 'Start Recording';
+                recordBtn.classList.remove('recording');
+                recIndicator.style.display = 'none';
+            }
+        });
+
+        // 2. 조이스틱 설정
+        var joystick = nipplejs.create({
+            zone: document.getElementById('joystick-zone'),
+            mode: 'static', position: { left: '50%', top: '50%' }, color: 'cyan', size: 120
+        });
+
+        let lastSentTime = 0;
+        joystick.on('move', function (evt, data) {
+            const now = Date.now();
+            if (now - lastSentTime < 80) return; // 통신 빈도 조절
+            lastSentTime = now;
+            if (data.distance > 5) {
+                // fetch 대신 socket.emit 사용
+                socket.emit('move_control', {
+                    angle: data.angle.degree,
+                    distance: Math.round(data.distance)
+                });
+            }
+        });
+        joystick.on('end', function () {
+            socket.emit('move_control', { command: 'stop' });
+        });
+
+        // 3. 버튼 기능 함수
+        function moveCam(dir) {
+            socket.emit('camera_control', { direction: dir });
+        }
+
+        function toggleRecord() {
+            const action = isRecording ? 'stop' : 'start';
+            socket.emit('record_control', { action: action });
+        }
+    </script>
+</body>
+</html>
