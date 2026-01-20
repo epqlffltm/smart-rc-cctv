@@ -1,28 +1,58 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PiCar-X Web Remote</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PiCar-X Joystick Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        .button { padding: 20px; font-size: 20px; width: 100px; margin: 5px; }
-        .container { text-align: center; margin-top: 50px; }
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        #joystick-container {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 200px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+        h1 { color: white; text-align: center; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>PiCar-X Control</h1>
-        <button class="button" onclick="sendCommand('forward')">Forward</button><br>
-        <button class="button" onclick="sendCommand('left')">Left</button>
-        <button class="button" onclick="sendCommand('stop')">Stop</button>
-        <button class="button" onclick="sendCommand('right')">Right</button>
-        <br>
-        <button class="button" onclick="sendCommand('backward')">Backward</button>
-    </div>
+    <h1>PiCar-X Remote</h1>
+    <div id="joystick-container"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.1/nipplejs.min.js"></script>
     <script>
-        function sendCommand(cmd) {
-            fetch(`/control?command=${cmd}`);
-        }
+        var joystick = nipplejs.create({
+            zone: document.getElementById('joystick-container'),
+            mode: 'static',
+            position: { left: '50%', top: '50%' },
+            color: 'cyan',
+            size: 150
+        });
+
+        let lastSentTime = 0;
+
+        joystick.on('move', function (evt, data) {
+            // 통신 과부하를 방지하기 위해 50ms마다 한 번씩만 전송
+            const now = Date.now();
+            if (now - lastSentTime < 50) return;
+            lastSentTime = now;
+
+            if (data.distance > 10) {
+                // 각도(angle)와 거리(distance)를 서버로 전송
+                // distance는 속도, angle.degree는 방향으로 활용
+                const angle = data.angle.degree;
+                const distance = Math.round(data.distance);
+                fetch(`/control?angle=${angle}&distance=${distance}`);
+            }
+        });
+
+        joystick.on('end', function () {
+            // 조이스틱을 놓으면 정지
+            fetch(`/control?command=stop`);
+        });
     </script>
 </body>
 </html>
