@@ -63,19 +63,28 @@ def camera_control():
     current_pan = max(min(current_pan, 35), -35)
     current_tilt = max(min(current_tilt, 35), -35)
     
-    px.set_cam_pan_angle(current_pan) #
-    px.set_cam_tilt_angle(current_tilt) #
+    px.set_cam_pan_angle(current_pan)
+    px.set_cam_tilt_angle(current_tilt)
     return "OK"
 
 @app.route('/record')
 def record():
     status = request.args.get('status')
     if status == 'start':
-        Vilib.rec_video_set["name"] = strftime("%Y-%m-%d-%H.%M.%S", localtime()) #
-        Vilib.rec_video_run() #
-        Vilib.rec_video_start() #
+        username = os.getlogin() 
+        save_path = f"/media/{username}/PIcarX_Video/"
+        
+        # 만약 폴더가 없다면 자동으로 생성하는 기능
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+            
+        Vilib.rec_video_set["path"] = save_path
+        Vilib.rec_video_set["name"] = strftime("%Y-%m-%d-%H.%M.%S", localtime())
+        
+        Vilib.rec_video_run()
+        Vilib.rec_video_start()
     else:
-        Vilib.rec_video_stop() #
+        Vilib.rec_video_stop()
     return "OK"
 
 if __name__ == '__main__':
