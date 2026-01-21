@@ -37,6 +37,7 @@ def move():
         px.forward(40)
     elif cmd == 'right':
         px.set_dir_servo_angle(35)
+        px.forward(40)
     elif cmd == 'stop':
         px.stop()
     return "OK"
