@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Picar-X 영상 보관함</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: sans-serif; background: #111; color: white; text-align: center; padding: 20px; }
+        table { width: 100%; max-width: 800px; margin: 20px auto; border-collapse: collapse; background: #222; }
+        th, td { padding: 12px; border: 1px solid #444; text-align: center; }
+        th { background: #333; }
+        .btn { padding: 8px 12px; border-radius: 5px; text-decoration: none; color: white; font-size: 14px; }
+        .btn-play { background: #007bff; }
+        .btn-del { background: #dc3545; margin-left: 5px; }
+        .btn-back { display: inline-block; margin-bottom: 20px; background: #555; padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <h2>🎥 녹화 영상 보관함</h2>
+    <a href="/" class="btn btn-back">⬅ 컨트롤러로 돌아가기</a>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>파일명</th>
+                <th>용량</th>
+                <th>날짜</th>
+                <th>관리</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for video in videos %}
+            <tr>
+                <td>{{ video.filename }}</td>
+                <td>{{ video.filesize_mb }} MB</td>
+                <td>{{ video.created_at }}</td>
+                <td>
+                    <a href="/download/{{ video.filename }}" class="btn btn-play" download>저장/재생</a>
+                    <a href="/delete/{{ video.id }}" class="btn btn-del" onclick="return confirm('정말 삭제할까요?')">삭제</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
