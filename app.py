@@ -3,20 +3,40 @@ from picarx import Picarx
 from vilib import Vilib
 import os
 from time import strftime, localtime
+import sqlite3
+import time
 
 app = Flask(__name__)
-px = Picarx() #
+px = Picarx()
 
 # 카메라 초기화
 try:
-    Vilib.camera_start(vflip=False, hflip=False) #
-    Vilib.display(local=False, web=True) #
+    Vilib.camera_start(vflip=False, hflip=False)
+    Vilib.display(local=False, web=True)
 except:
     pass
 
-# 카메라 각도 상태 저장 변수
 current_pan = 0
 current_tilt = 0
+
+# 1. DB 초기화 (함수 내부 재귀 호출 삭제)
+def init_db():
+    conn = sqlite3.connect('picarx.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS videos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            filesize_mb REAL,
+            created_at TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# 앱 실행 전 DB 초기화 호출
+init_db()
 
 @app.route('/')
 def index():
@@ -25,7 +45,6 @@ def index():
 @app.route('/move')
 def move():
     cmd = request.args.get('cmd')
-    # 주행 제어 로직
     if cmd == 'forward':
         px.set_dir_servo_angle(0)
         px.forward(50)
@@ -46,24 +65,15 @@ def move():
 def camera_control():
     global current_pan, current_tilt
     cmd = request.args.get('cmd')
-    step = 10 # 한 번 누를 때 움직일 각도
-    
-    # [방향 교정 완료] 좌우 방향을 반대로 수정했습니다.
-    if cmd == 'up': 
-        current_tilt += step
-    elif cmd == 'down': 
-        current_tilt -= step
-    elif cmd == 'left': 
-        current_pan -= step
-    elif cmd == 'right': 
-        current_pan += step
-    elif cmd == 'center': 
-        current_pan, current_tilt = 0, 0
+    step = 10
+    if cmd == 'up': current_tilt += step
+    elif cmd == 'down': current_tilt -= step
+    elif cmd == 'left': current_pan -= step
+    elif cmd == 'right': current_pan += step
+    elif cmd == 'center': current_pan, current_tilt = 0, 0
 
-    # 각도 제한 (-35 ~ 35도)
     current_pan = max(min(current_pan, 35), -35)
     current_tilt = max(min(current_tilt, 35), -35)
-    
     px.set_cam_pan_angle(current_pan)
     px.set_cam_tilt_angle(current_tilt)
     return "OK"
@@ -71,25 +81,55 @@ def camera_control():
 @app.route('/record')
 def record():
     status = request.args.get('status')
+    username = os.getlogin()
+    save_path = f"/media/{username}/PIcarX_Video/"
+    
     if status == 'start':
-        username = os.getlogin() 
-        save_path = f"/media/{username}/PIcarX_Video/"
-        
-        # 만약 폴더가 없다면 자동으로 생성하는 기능
         if not os.path.exists(save_path):
             os.makedirs(save_path)
             
         Vilib.rec_video_set["path"] = save_path
-        Vilib.rec_video_set["name"] = strftime("%Y-%m-%d-%H.%M.%S", localtime())
+        # .avi 확장자는 vilib 내부에서 붙으므로 이름만 저장
+        video_name = strftime("%Y-%m-%d-%H.%M.%S", localtime())
+        Vilib.rec_video_set["name"] = video_name
         
         Vilib.rec_video_run()
         Vilib.rec_video_start()
+        return jsonify(status="recording", file=video_name)
+    
     else:
+        # 녹화 중지
         Vilib.rec_video_stop()
-    return "OK"
+        
+        # 실제 저장된 파일 정보 조합
+        filename = Vilib.rec_video_set["name"] + ".avi"
+        filepath = os.path.join(save_path, filename)
+        
+        # 파일이 물리적으로 생성될 때까지 잠시 대기
+        time.sleep(0.5)
+        
+        if os.path.exists(filepath):
+            filesize = round(os.path.getsize(filepath) / (1024 * 1024), 2) # MB 단위
+            created_at = strftime("%Y-%m-%d %H:%M:%S", localtime())
+            
+            # DB 저장
+            try:
+                conn = sqlite3.connect('picarx.db')
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO videos (filename, filepath, filesize_mb, created_at)
+                    VALUES (?, ?, ?, ?)
+                ''', (filename, filepath, filesize, created_at))
+                conn.commit()
+                conn.close()
+                print(f"DB 저장 성공: {filename} ({filesize}MB)")
+            except Exception as e:
+                print(f"DB 에러: {e}")
+                
+        return jsonify(status="stopped")
 
 if __name__ == '__main__':
     try:
         app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
     finally:
-        px.stop() #
+        px.stop()
