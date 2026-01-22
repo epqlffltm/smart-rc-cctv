@@ -10,7 +10,6 @@ import subprocess
 app = Flask(__name__)
 px = Picarx()
 
-# 전역 변수 및 카메라 초기화
 audio_proc = None
 current_pan = 0
 current_tilt = 0
@@ -21,7 +20,6 @@ try:
 except:
     pass
 
-# DB 초기화
 def init_db():
     conn = sqlite3.connect('picarx.db')
     cursor = conn.cursor()
@@ -57,18 +55,14 @@ def move():
 def camera_control():
     global current_pan, current_tilt
     cmd = request.args.get('cmd')
-    step = 10 # 한 번 클릭 시 움직일 각도
-    
+    step = 10
     if cmd == 'up': current_tilt += step
     elif cmd == 'down': current_tilt -= step
     elif cmd == 'left': current_pan -= step
     elif cmd == 'right': current_pan += step
     elif cmd == 'center': current_pan, current_tilt = 0, 0
-
-    # 각도 제한 (-35 ~ 35도)
     current_pan = max(min(current_pan, 35), -35)
     current_tilt = max(min(current_tilt, 35), -35)
-    
     px.set_cam_pan_angle(current_pan)
     px.set_cam_tilt_angle(current_tilt)
     return "OK"
@@ -77,20 +71,18 @@ def camera_control():
 def record():
     global audio_proc
     status = request.args.get('status')
-    save_path = "/media/epqlffltm/storage/PIcarX_Video/" # 1.4TB 절대경로
+    save_path = "/media/epqlffltm/storage/PIcarX_Video/"
     
     if status == 'start':
         if not os.path.exists(save_path):
             os.makedirs(save_path, exist_ok=True)
-        
         video_name = strftime("%Y-%m-%d-%H.%M.%S", localtime())
         Vilib.rec_video_set["path"] = save_path
         Vilib.rec_video_set["name"] = video_name
         
+        # 영상 및 오디오 동시 시작
         Vilib.rec_video_run()
         Vilib.rec_video_start()
-        
-        # 오디오 녹음 (카드 4번 마이크)
         audio_temp_path = os.path.join(save_path, f"{video_name}.wav")
         audio_proc = subprocess.Popen([
             'arecord', '-D', 'plughw:4,0', '-f', 'S16_LE', '-r', '44100', '-c', '1', '-t', 'wav', audio_temp_path
@@ -109,16 +101,21 @@ def record():
         audio_path = os.path.join(save_path, video_name + ".wav")
         final_mp4 = os.path.join(save_path, video_name + ".mp4")
         
-        time.sleep(1.5) # 파일 닫기 대기
+        time.sleep(2) # 파일이 완전히 닫힐 때까지 넉넉히 대기
         
         if os.path.exists(video_path) and os.path.exists(audio_path):
-            # [핵심] H.264 인코딩 병합 (화면+소리 모두 나오게 함)
+            # [싱크 최적화 FFmpeg 명령어]
+            # -filter_complex "[1:a]aresample=async=1": 오디오 타임스탬프 보정
+            # -fflags +genpts: 영상 타임스탬프 재생성
             subprocess.run([
-                'ffmpeg', '-y', '-i', video_path, '-i', audio_path,
+                'ffmpeg', '-y', 
+                '-i', video_path, 
+                '-i', audio_path,
+                '-filter_complex', '[1:a]aresample=async=1',
                 '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
-                '-af', 'volume=2.0', '-c:a', 'aac', '-shortest', final_mp4
+                '-c:a', 'aac', '-b:a', '128k',
+                '-shortest', final_mp4
             ])
-            
             os.remove(video_path)
             os.remove(audio_path)
             
@@ -141,8 +138,14 @@ def video_list():
     conn.close()
     return render_template('videos.html', videos=videos)
 
-@app.route('/download/<filename>')
-def download_video(filename):
+# 영상 재생 페이지 라우트
+@app.route('/play/<filename>')
+def play_video(filename):
+    return render_template('player.html', filename=filename)
+
+# 실제 파일 전송 라우트 (재생 및 다운로드 공용)
+@app.route('/stream/<filename>')
+def stream_video(filename):
     save_path = "/media/epqlffltm/storage/PIcarX_Video/"
     return send_from_directory(save_path, filename)
 
