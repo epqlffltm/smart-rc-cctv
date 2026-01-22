@@ -3,6 +3,8 @@ FROM python:3.11-slim-bookworm
 
 # 2. 시스템 필수 패키지 설치 (git 추가됨)
 RUN apt-get update && apt-get install -y \
+    gcc \
+    python3-dev \
     git \
     ffmpeg \
     alsa-utils \
@@ -20,7 +22,7 @@ WORKDIR /app
 
 #RUN git clone https://github.com/sunfounder/vilib.git && \
 #    cd vilib && python3 setup.py install && cd .. && rm -rf vilib
-RUN pip install --no-cache-dir gpiozero RPi.GPIO
+RUN pip install --no-cache-dir gpiozero RPi.GPIO smbus2 spidev
 RUN pip install --no-cache-dir git+https://github.com/sunfounder/robot-hat.git
 RUN pip install --no-cache-dir git+https://github.com/sunfounder/picar-x.git
 RUN pip install --no-cache-dir git+https://github.com/sunfounder/vilib.git
