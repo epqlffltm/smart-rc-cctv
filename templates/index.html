@@ -1,61 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Picar-X CCTV</title>
+    <title>Picar-X CCTV Pro</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; touch-action: manipulation; }
-        #video-feed { width: 100%; max-width: 600px; margin-top: 5px; border: 2px solid #333; }
-        .ui-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px; }
-        .control-panel { background: #222; padding: 10px; border-radius: 15px; }
-        .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 180px; margin: 0 auto; }
-        .btn { padding: 20px 0; background: #444; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; user-select: none; }
-        .btn:active { background: #888; }
-        .btn-rec { background: #900; grid-column: span 3; margin-top: 10px; padding: 10px; }
-        .btn-storage { background: #28a745; width: 100%; margin-top: 10px; padding: 15px; }
+        #video-feed { width: 100%; max-width: 800px; border-bottom: 3px solid #333; }
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; }
+        .card { background: #222; padding: 15px; border-radius: 12px; }
+        .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 150px; margin: 0 auto; }
+        .btn { padding: 15px 0; background: #444; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn:active { background: #777; }
+        .btn-rec { background: #900; width: 100%; margin-top: 15px; }
+        .btn-auto { background: #0056b3; width: 100%; margin-bottom: 10px; }
+        .btn-link { background: #28a745; width: 95%; padding: 15px; margin-top: 10px; display: inline-block; text-decoration: none; color: white; font-weight: bold; border-radius: 8px; }
     </style>
 </head>
 <body>
     <img id="video-feed" src="">
-    <div class="ui-grid">
-        <div class="control-panel">
+    <div class="grid-container">
+        <div class="card">
             <h3>DRIVE</h3>
             <div class="d-pad">
-                <div></div><button class="btn" onmousedown="sendMove('forward')" onmouseup="sendMove('stop')" ontouchstart="sendMove('forward')" ontouchend="sendMove('stop')">▲</button><div></div>
-                <button class="btn" onmousedown="sendMove('left')" onmouseup="sendMove('stop')" ontouchstart="sendMove('left')" ontouchend="sendMove('stop')">◀</button>
-                <button class="btn" onclick="sendMove('stop')">■</button>
-                <button class="btn" onmousedown="sendMove('right')" onmouseup="sendMove('stop')" ontouchstart="sendMove('right')" ontouchend="sendMove('stop')">▶</button>
-                <div></div><button class="btn" onmousedown="sendMove('backward')" onmouseup="sendMove('stop')" ontouchstart="sendMove('backward')" ontouchend="sendMove('stop')">▼</button><div></div>
+                <div></div><button class="btn" onmousedown="move('forward')" onmouseup="move('stop')" ontouchstart="move('forward')" ontouchend="move('stop')">▲</button><div></div>
+                <button class="btn" onmousedown="move('left')" onmouseup="move('stop')" ontouchstart="move('left')" ontouchend="move('stop')">◀</button>
+                <button class="btn" onclick="move('stop')">■</button>
+                <button class="btn" onmousedown="move('right')" onmouseup="move('stop')" ontouchstart="move('right')" ontouchend="move('stop')">▶</button>
+                <div></div><button class="btn" onmousedown="move('backward')" onmouseup="move('stop')" ontouchstart="move('backward')" ontouchend="move('stop')">▼</button><div></div>
             </div>
         </div>
-        <div class="control-panel">
-            <h3>CAMERA</h3>
+        <div class="card">
+            <h3>SMART & CAM</h3>
+            <button id="autoBtn" class="btn btn-auto" onclick="toggleAuto()">SMART MODE: OFF</button>
             <div class="d-pad">
-                <div></div><button class="btn" onclick="sendCam('up')">UP</button><div></div>
-                <button class="btn" onclick="sendCam('left')">LEFT</button>
-                <button class="btn" onclick="sendCam('center')">MID</button>
-                <button class="btn" onclick="sendCam('right')">RIGHT</button>
-                <div></div><button class="btn" onclick="sendCam('down')">DOWN</button><div></div>
+                <div></div><button class="btn" onclick="cam('up')">U</button><div></div>
+                <button class="btn" onclick="cam('left')">L</button>
+                <button class="btn" onclick="cam('center')">M</button>
+                <button class="btn" onclick="cam('right')">R</button>
+                <div></div><button class="btn" onclick="cam('down')">D</button><div></div>
             </div>
             <button id="recBtn" class="btn btn-rec" onclick="toggleRecord()">REC START</button>
         </div>
-        <div style="grid-column: span 2;">
-            <button class="btn btn-storage" onclick="location.href='/videos'">📂 영상 보관함 열기 (1.4TB)</button>
-        </div>
     </div>
+    <a href="/videos" class="btn-link">📂 1.4TB 영상 보관함 (재생/다운로드)</a>
+
     <script>
         document.getElementById('video-feed').src = "http://" + window.location.hostname + ":9000/mjpg";
-        function sendMove(cmd) { fetch(`/move?cmd=${cmd}`); }
-        function sendCam(cmd) { fetch(`/camera?cmd=${cmd}`); }
-        let isRecording = false;
-        function toggleRecord() {
-            isRecording = !isRecording;
-            const btn = document.getElementById('recBtn');
-            btn.innerText = isRecording ? "REC STOP" : "REC START";
-            btn.style.background = isRecording ? "#444" : "#900";
-            fetch(`/record?status=${isRecording ? 'start' : 'stop'}`);
+        function move(c) { fetch(`/move?cmd=${c}`); }
+        function cam(c) { fetch(`/camera?cmd=${c}`); }
+        
+        let autoOn = false;
+        function toggleAuto() {
+            autoOn = !autoOn;
+            const b = document.getElementById('autoBtn');
+            b.innerText = autoOn ? "SMART MODE: ON" : "SMART MODE: OFF";
+            b.style.background = autoOn ? "#28a745" : "#0056b3";
+            fetch(`/auto_mode?status=${autoOn ? 'on' : 'off'}`);
         }
-        window.oncontextmenu = function(e) { e.preventDefault(); return false; };
+
+        let recOn = false;
+        function toggleRecord() {
+            recOn = !recOn;
+            const b = document.getElementById('recBtn');
+            b.innerText = recOn ? "REC STOP" : "REC START";
+            b.style.background = recOn ? "#444" : "#900";
+            fetch(`/record?status=${recOn ? 'start' : 'stop'}`);
+        }
     </script>
 </body>
 </html>

@@ -2,24 +2,32 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 from picarx import Picarx
 from vilib import Vilib
 import os
-from time import strftime, localtime
+from time import strftime, localtime, sleep
 import sqlite3
-import time
 import subprocess
+import threading
 
 app = Flask(__name__)
 px = Picarx()
 
+# --- 전역 변수 및 설정 ---
 audio_proc = None
 current_pan = 0
 current_tilt = 0
+auto_mode = False  # 스마트 모드 활성화 여부
+SAVE_PATH = "/media/epqlffltm/storage/PIcarX_Video/"
 
+# 낭떠러지 감지 기준값 설정
+px.set_cliff_reference([200, 200, 200])
+
+# 카메라 초기화 (1080p 설정)
 try:
-    Vilib.camera_start(vflip=False, hflip=False)
+    Vilib.camera_start(vflip=False, hflip=False, size=(1920, 1080))
     Vilib.display(local=False, web=True)
-except:
-    pass
+except Exception as e:
+    print(f"카메라 시작 실패: {e}")
 
+# DB 초기화
 def init_db():
     conn = sqlite3.connect('picarx.db')
     cursor = conn.cursor()
@@ -37,12 +45,55 @@ def init_db():
 
 init_db()
 
+# --- 스마트 모드(자율 주행) 스레드 로직 ---
+def auto_pilot_loop():
+    global auto_mode
+    POWER = 50
+    SafeDistance = 40
+    DangerDistance = 20
+
+    while True:
+        if auto_mode:
+            # 1. 낭떠러지 감지 (최우선순위)
+            gm_val_list = px.get_grayscale_data()
+            gm_state = px.get_cliff_status(gm_val_list)
+
+            if gm_state:  # 낭떠러지 감지됨 (danger)
+                px.stop()
+                px.backward(80)
+                sleep(0.3)
+                px.stop()
+                continue
+
+            # 2. 장애물 회피
+            distance = round(px.ultrasonic.read(), 2)
+            if distance >= SafeDistance:
+                px.set_dir_servo_angle(0)
+                px.forward(POWER)
+            elif distance >= DangerDistance:
+                px.set_dir_servo_angle(30)
+                px.forward(POWER)
+                sleep(0.1)
+            else: # 아주 가까운 경우
+                px.set_dir_servo_angle(-30)
+                px.backward(POWER)
+                sleep(0.5)
+        
+        sleep(0.1)
+
+# 백그라운드 스레드 시작
+threading.Thread(target=auto_pilot_loop, daemon=True).start()
+
+# --- Flask 라우트 ---
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/move')
 def move():
+    global auto_mode
+    if auto_mode: return "Auto Mode Active"
     cmd = request.args.get('cmd')
     if cmd == 'forward': px.forward(50)
     elif cmd == 'backward': px.backward(50)
@@ -67,63 +118,61 @@ def camera_control():
     px.set_cam_tilt_angle(current_tilt)
     return "OK"
 
+@app.route('/auto_mode')
+def toggle_auto_mode():
+    global auto_mode
+    status = request.args.get('status')
+    auto_mode = (status == 'on')
+    if not auto_mode: px.stop()
+    return jsonify(auto_mode=auto_mode)
+
 @app.route('/record')
 def record():
     global audio_proc
     status = request.args.get('status')
-    save_path = "/media/epqlffltm/storage/PIcarX_Video/"
     
     if status == 'start':
-        if not os.path.exists(save_path):
-            os.makedirs(save_path, exist_ok=True)
-        video_name = strftime("%Y-%m-%d-%H.%M.%S", localtime())
-        Vilib.rec_video_set["path"] = save_path
-        Vilib.rec_video_set["name"] = video_name
+        if not os.path.exists(SAVE_PATH):
+            os.makedirs(SAVE_PATH, exist_ok=True)
         
-        # 영상 및 오디오 동시 시작
+        v_name = strftime("%Y-%m-%d-%H.%M.%S", localtime())
+        Vilib.rec_video_set["path"] = SAVE_PATH
+        Vilib.rec_video_set["name"] = v_name
+        Vilib.rec_video_set["resolution"] = (1920, 1080)
+        
         Vilib.rec_video_run()
         Vilib.rec_video_start()
-        audio_temp_path = os.path.join(save_path, f"{video_name}.wav")
+        
+        audio_temp = os.path.join(SAVE_PATH, f"{v_name}.wav")
         audio_proc = subprocess.Popen([
-            'arecord', '-D', 'plughw:4,0', '-f', 'S16_LE', '-r', '44100', '-c', '1', '-t', 'wav', audio_temp_path
+            'arecord', '-D', 'plughw:4,0', '-f', 'S16_LE', '-r', '44100', '-c', '1', '-t', 'wav', audio_temp
         ])
         return jsonify(status="recording")
     
     else:
         Vilib.rec_video_stop()
         if audio_proc:
-            audio_proc.terminate()
-            audio_proc.wait()
-            audio_proc = None
+            audio_proc.terminate(); audio_proc.wait(); audio_proc = None
         
-        video_name = Vilib.rec_video_set["name"]
-        video_path = os.path.join(save_path, video_name + ".avi")
-        audio_path = os.path.join(save_path, video_name + ".wav")
-        final_mp4 = os.path.join(save_path, video_name + ".mp4")
+        v_name = Vilib.rec_video_set["name"]
+        v_path = os.path.join(SAVE_PATH, v_name + ".avi")
+        a_path = os.path.join(SAVE_PATH, v_name + ".wav")
+        final_mp4 = os.path.join(SAVE_PATH, v_name + ".mp4")
         
-        time.sleep(2) # 파일이 완전히 닫힐 때까지 넉넉히 대기
-        
-        if os.path.exists(video_path) and os.path.exists(audio_path):
-            # [싱크 최적화 FFmpeg 명령어]
-            # -filter_complex "[1:a]aresample=async=1": 오디오 타임스탬프 보정
-            # -fflags +genpts: 영상 타임스탬프 재생성
+        sleep(2)
+        if os.path.exists(v_path) and os.path.exists(a_path):
             subprocess.run([
-                'ffmpeg', '-y', 
-                '-i', video_path, 
-                '-i', audio_path,
-                '-filter_complex', '[1:a]aresample=async=1',
+                'ffmpeg', '-y', '-i', v_path, '-i', a_path,
+                '-af', 'volume=2.0,aresample=async=1',
                 '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
-                '-c:a', 'aac', '-b:a', '128k',
-                '-shortest', final_mp4
+                '-c:a', 'aac', '-shortest', final_mp4
             ])
-            os.remove(video_path)
-            os.remove(audio_path)
+            os.remove(v_path); os.remove(a_path)
             
-            filesize = round(os.path.getsize(final_mp4) / (1024 * 1024), 2)
-            created_at = strftime("%Y-%m-%d %H:%M:%S", localtime())
+            fsize = round(os.getsize(final_mp4) / (1024 * 1024), 2)
+            db_time = strftime("%Y-%m-%d %H:%M:%S", localtime())
             conn = sqlite3.connect('picarx.db')
-            cursor = conn.cursor()
-            cursor.execute('INSERT INTO videos (filename, filepath, filesize_mb, created_at) VALUES (?,?,?,?)', (os.path.basename(final_mp4), final_mp4, filesize, created_at))
+            conn.execute('INSERT INTO videos (filename, filepath, filesize_mb, created_at) VALUES (?,?,?,?)', (os.path.basename(final_mp4), final_mp4, fsize, db_time))
             conn.commit(); conn.close()
             
         return jsonify(status="stopped")
@@ -132,31 +181,24 @@ def record():
 def video_list():
     conn = sqlite3.connect('picarx.db')
     conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM videos ORDER BY created_at DESC')
-    videos = cursor.fetchall()
+    videos = conn.execute('SELECT * FROM videos ORDER BY created_at DESC').fetchall()
     conn.close()
     return render_template('videos.html', videos=videos)
 
-# 영상 재생 페이지 라우트
 @app.route('/play/<filename>')
 def play_video(filename):
     return render_template('player.html', filename=filename)
 
-# 실제 파일 전송 라우트 (재생 및 다운로드 공용)
 @app.route('/stream/<filename>')
 def stream_video(filename):
-    save_path = "/media/epqlffltm/storage/PIcarX_Video/"
-    return send_from_directory(save_path, filename)
+    return send_from_directory(SAVE_PATH, filename)
 
 @app.route('/delete/<int:video_id>')
 def delete_video(video_id):
     conn = sqlite3.connect('picarx.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT filepath FROM videos WHERE id = ?', (video_id,))
-    row = cursor.fetchone()
-    if row and os.path.exists(row[0]):
-        os.remove(row[0])
+    row = cursor.execute('SELECT filepath FROM videos WHERE id = ?', (video_id,)).fetchone()
+    if row and os.path.exists(row[0]): os.remove(row[0])
     cursor.execute('DELETE FROM videos WHERE id = ?', (video_id,))
     conn.commit(); conn.close()
     return redirect(url_for('video_list'))
