@@ -5,21 +5,23 @@ import os
 from time import strftime, localtime
 import sqlite3
 import time
-import subprocess # 오디오 녹음 및 병합용
+import subprocess
 
 app = Flask(__name__)
 px = Picarx()
 
-# 전역 변수로 오디오 프로세스 관리
+# 전역 변수 및 카메라 초기화
 audio_proc = None
+current_pan = 0
+current_tilt = 0
 
-# 카메라 초기화
 try:
     Vilib.camera_start(vflip=False, hflip=False)
     Vilib.display(local=False, web=True)
 except:
     pass
 
+# DB 초기화
 def init_db():
     conn = sqlite3.connect('picarx.db')
     cursor = conn.cursor()
@@ -55,15 +57,27 @@ def move():
 def camera_control():
     global current_pan, current_tilt
     cmd = request.args.get('cmd')
-    # ... 카메라 조절 로직 (이전과 동일) ...
+    step = 10 # 한 번 클릭 시 움직일 각도
+    
+    if cmd == 'up': current_tilt += step
+    elif cmd == 'down': current_tilt -= step
+    elif cmd == 'left': current_pan -= step
+    elif cmd == 'right': current_pan += step
+    elif cmd == 'center': current_pan, current_tilt = 0, 0
+
+    # 각도 제한 (-35 ~ 35도)
+    current_pan = max(min(current_pan, 35), -35)
+    current_tilt = max(min(current_tilt, 35), -35)
+    
+    px.set_cam_pan_angle(current_pan)
+    px.set_cam_tilt_angle(current_tilt)
     return "OK"
 
 @app.route('/record')
 def record():
     global audio_proc
     status = request.args.get('status')
-    username = os.getlogin()
-    save_path = f"/media/{username}/storage/PIcarX_Video/"
+    save_path = "/media/epqlffltm/storage/PIcarX_Video/" # 1.4TB 절대경로
     
     if status == 'start':
         if not os.path.exists(save_path):
@@ -73,25 +87,17 @@ def record():
         Vilib.rec_video_set["path"] = save_path
         Vilib.rec_video_set["name"] = video_name
         
-        # 1. 영상 녹화 시작
         Vilib.rec_video_run()
         Vilib.rec_video_start()
         
-        # 2. 오디오 녹음 시작 (설정 최적화)
+        # 오디오 녹음 (카드 4번 마이크)
         audio_temp_path = os.path.join(save_path, f"{video_name}.wav")
         audio_proc = subprocess.Popen([
-            'arecord', 
-            '-D', 'plughw:4,0', 
-            '-f', 'S16_LE',    # 16비트 형식
-            '-r', '44100',      # CD 음질 샘플링
-            '-c', '1',          # 모노(USB 마이크는 보통 모노)
-            '-t', 'wav', 
-            audio_temp_path
+            'arecord', '-D', 'plughw:4,0', '-f', 'S16_LE', '-r', '44100', '-c', '1', '-t', 'wav', audio_temp_path
         ])
         return jsonify(status="recording")
     
     else:
-        # 1. 녹화 중지
         Vilib.rec_video_stop()
         if audio_proc:
             audio_proc.terminate()
@@ -103,33 +109,25 @@ def record():
         audio_path = os.path.join(save_path, video_name + ".wav")
         final_mp4 = os.path.join(save_path, video_name + ".mp4")
         
-        time.sleep(1.5) # 파일이 완전히 닫힐 때까지 대기
+        time.sleep(1.5) # 파일 닫기 대기
         
         if os.path.exists(video_path) and os.path.exists(audio_path):
-            # 2. FFmpeg 병합 (소리가 작을 수 있으니 volume=2.0으로 2배 증폭 옵션 추가)
+            # [핵심] H.264 인코딩 병합 (화면+소리 모두 나오게 함)
             subprocess.run([
-                'ffmpeg', '-y', 
-                '-i', video_path, 
-                '-i', audio_path,
-                '-af', 'volume=2.0', # 소리 2배 증폭
-                '-c:v', 'copy', 
-                '-c:a', 'aac', 
-                '-shortest',        # 영상/음성 중 짧은 쪽에 맞춤
-                final_mp4
+                'ffmpeg', '-y', '-i', video_path, '-i', audio_path,
+                '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+                '-af', 'volume=2.0', '-c:a', 'aac', '-shortest', final_mp4
             ])
             
-            # 3. 임시 파일 삭제
             os.remove(video_path)
             os.remove(audio_path)
             
-            # 4. DB 저장
             filesize = round(os.path.getsize(final_mp4) / (1024 * 1024), 2)
             created_at = strftime("%Y-%m-%d %H:%M:%S", localtime())
             conn = sqlite3.connect('picarx.db')
             cursor = conn.cursor()
             cursor.execute('INSERT INTO videos (filename, filepath, filesize_mb, created_at) VALUES (?,?,?,?)', (os.path.basename(final_mp4), final_mp4, filesize, created_at))
-            conn.commit()
-            conn.close()
+            conn.commit(); conn.close()
             
         return jsonify(status="stopped")
 
@@ -145,8 +143,7 @@ def video_list():
 
 @app.route('/download/<filename>')
 def download_video(filename):
-    username = os.getlogin()
-    save_path = f"/media/{username}/storage/PIcarX_Video/"
+    save_path = "/media/epqlffltm/storage/PIcarX_Video/"
     return send_from_directory(save_path, filename)
 
 @app.route('/delete/<int:video_id>')
