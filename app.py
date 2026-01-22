@@ -82,14 +82,19 @@ def camera_control():
 def record():
     status = request.args.get('status')
     username = os.getlogin()
-    save_path = f"/media/{username}/PIcarX_Video/"
+    
+    # [수정된 부분] 경로에 /storage/를 추가하여 1.4TB 공간을 가리키도록 함
+    save_path = f"/media/{username}/storage/PIcarX_Video/"
     
     if status == 'start':
+        # 폴더가 없으면 생성
         if not os.path.exists(save_path):
-            os.makedirs(save_path)
+            try:
+                os.makedirs(save_path, exist_ok=True)
+            except PermissionError:
+                return jsonify(status="error", message="Permission denied. Check mount settings.")
             
         Vilib.rec_video_set["path"] = save_path
-        # .avi 확장자는 vilib 내부에서 붙으므로 이름만 저장
         video_name = strftime("%Y-%m-%d-%H.%M.%S", localtime())
         Vilib.rec_video_set["name"] = video_name
         
@@ -105,7 +110,7 @@ def record():
         filename = Vilib.rec_video_set["name"] + ".avi"
         filepath = os.path.join(save_path, filename)
         
-        # 파일이 물리적으로 생성될 때까지 잠시 대기
+        # 파일이 물리적으로 완전히 쓰여질 때까지 잠시 대기
         time.sleep(0.5)
         
         if os.path.exists(filepath):
@@ -122,12 +127,13 @@ def record():
                 ''', (filename, filepath, filesize, created_at))
                 conn.commit()
                 conn.close()
-                print(f"DB 저장 성공: {filename} ({filesize}MB)")
+                print(f"1.4TB 저장소 DB 저장 성공: {filename} ({filesize}MB)")
             except Exception as e:
                 print(f"DB 에러: {e}")
                 
         return jsonify(status="stopped")
-
+    
+    
 if __name__ == '__main__':
     try:
         app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
