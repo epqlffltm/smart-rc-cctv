@@ -5,31 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; touch-action: manipulation; }
-        #video-feed { 
-            width: 100%; max-width: 600px; margin-top: 5px; border: 2px solid #333; 
-            -webkit-touch-callout: none; -webkit-user-drag: none; 
-        }
+        #video-feed { width: 100%; max-width: 600px; margin-top: 5px; border: 2px solid #333; -webkit-touch-callout: none; -webkit-user-drag: none; }
         .ui-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px; }
         .control-panel { background: #222; padding: 10px; border-radius: 15px; }
         .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 180px; margin: 0 auto; }
-        
-        .btn { 
-            padding: 20px 0; background: #444; color: white; border: none; border-radius: 8px; 
-            font-weight: bold; cursor: pointer; 
-            -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none;
-            -moz-user-select: none; -ms-user-select: none; user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }
+        .btn { padding: 20px 0; background: #444; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
         .btn:active { background: #888; }
-        .btn-center { background: #555; }
         .btn-rec { background: #900; grid-column: span 3; margin-top: 10px; padding: 10px; }
-        h3 { margin: 5px 0; font-size: 14px; color: #aaa; }
     </style>
 </head>
 <body>
-    <img id="video-feed" src="">
-
-    <div class="ui-grid">
+    <img id="video-feed" src=""> <div class="ui-grid">
         <div class="control-panel">
             <h3>DRIVE</h3>
             <div class="d-pad">
@@ -37,30 +23,44 @@
                 <button class="btn" onmousedown="sendMove('forward')" onmouseup="sendMove('stop')" ontouchstart="sendMove('forward')" ontouchend="sendMove('stop')">▲</button>
                 <div></div>
                 <button class="btn" onmousedown="sendMove('left')" onmouseup="sendMove('stop')" ontouchstart="sendMove('left')" ontouchend="sendMove('stop')">◀</button>
-                <button class="btn btn-center" onclick="sendMove('stop')">■</button>
+                <button class="btn" onclick="sendMove('stop')">■</button>
                 <button class="btn" onmousedown="sendMove('right')" onmouseup="sendMove('stop')" ontouchstart="sendMove('right')" ontouchend="sendMove('stop')">▶</button>
                 <div></div>
                 <button class="btn" onmousedown="sendMove('backward')" onmouseup="sendMove('stop')" ontouchstart="sendMove('backward')" ontouchend="sendMove('stop')">▼</button>
                 <div></div>
             </div>
         </div>
-
         <div class="control-panel">
             <h3>CAMERA</h3>
             <div class="d-pad">
-                <div></div>
-                <button class="btn" onclick="sendCam('up')">UP</button>
-                <div></div>
+                <div></div><button class="btn" onclick="sendCam('up')">UP</button><div></div>
                 <button class="btn" onclick="sendCam('left')">LEFT</button>
-                <button class="btn btn-center" onclick="sendCam('center')">MID</button>
+                <button class="btn" onclick="sendCam('center')">MID</button>
                 <button class="btn" onclick="sendCam('right')">RIGHT</button>
-                <div></div>
-                <button class="btn" onclick="sendCam('down')">DOWN</button>
-                <div></div>
+                <div></div><button class="btn" onclick="sendCam('down')">DOWN</button><div></div>
             </div>
             <button id="recBtn" class="btn btn-rec" onclick="toggleRecord()">REC START</button>
         </div>
     </div>
 
     <script>
-        document.getElementById('video-feed').src = "http://" + window
+        // 현재 접속한 IP를 기준으로 9000번 포트의 영상을 가져옵니다.
+        document.getElementById('video-feed').src = "http://" + window.location.hostname + ":9000/mjpg";
+
+        function sendMove(cmd) { fetch(`/move?cmd=${cmd}`); }
+        function sendCam(cmd) { fetch(`/camera?cmd=${cmd}`); }
+
+        let isRecording = false;
+        function toggleRecord() {
+            isRecording = !isRecording;
+            const btn = document.getElementById('recBtn');
+            btn.innerText = isRecording ? "REC STOP" : "REC START";
+            btn.style.background = isRecording ? "#444" : "#900";
+            fetch(`/record?status=${isRecording ? 'start' : 'stop'}`);
+        }
+
+        // 모바일 길게 누르기 메뉴 방지
+        window.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); return false; };
+    </script>
+</body>
+</html>
