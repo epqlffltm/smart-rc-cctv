@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, redirect
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
 from picarx import Picarx
 from vilib import Vilib
 import os
@@ -16,9 +16,7 @@ try:
 except:
     pass
 
-current_pan = 0
-current_tilt = 0
-
+# DB 초기화 - 테이블 구조 확인 (filepath, filesize_mb)
 def init_db():
     conn = sqlite3.connect('picarx.db')
     cursor = conn.cursor()
@@ -78,8 +76,9 @@ def record():
         video_name = strftime("%Y-%m-%d-%H.%M.%S", localtime())
         Vilib.rec_video_set["path"] = save_path
         Vilib.rec_video_set["name"] = video_name
-        Vilib.rec_video_run(); Vilib.rec_video_start()
-        return jsonify(status="recording", file=video_name)
+        Vilib.rec_video_run()
+        Vilib.rec_video_start()
+        return jsonify(status="recording")
     else:
         Vilib.rec_video_stop()
         filename = Vilib.rec_video_set["name"] + ".avi"
@@ -90,12 +89,12 @@ def record():
             created_at = strftime("%Y-%m-%d %H:%M:%S", localtime())
             conn = sqlite3.connect('picarx.db')
             cursor = conn.cursor()
-            cursor.execute('INSERT INTO videos (filename, filepath, filesize_mb, created_at) VALUES (?,?,?,?)', 
-                           (filename, filepath, filesize, created_at))
-            conn.commit(); conn.close()
+            # 이름 주의: filepath, filesize_mb 가 테이블과 일치해야 함
+            cursor.execute('INSERT INTO videos (filename, filepath, filesize_mb, created_at) VALUES (?,?,?,?)', (filename, filepath, filesize, created_at))
+            conn.commit()
+            conn.close()
         return jsonify(status="stopped")
 
-# [추가된 부분] 영상 목록 보기
 @app.route('/videos')
 def video_list():
     conn = sqlite3.connect('picarx.db')
@@ -106,14 +105,12 @@ def video_list():
     conn.close()
     return render_template('videos.html', videos=videos)
 
-# [추가된 부분] 영상 다운로드
 @app.route('/download/<filename>')
 def download_video(filename):
     username = os.getlogin()
     save_path = f"/media/{username}/storage/PIcarX_Video/"
     return send_from_directory(save_path, filename)
 
-# [추가된 부분] 영상 삭제
 @app.route('/delete/<int:video_id>')
 def delete_video(video_id):
     conn = sqlite3.connect('picarx.db')
@@ -123,8 +120,9 @@ def delete_video(video_id):
     if row and os.path.exists(row[0]):
         os.remove(row[0])
     cursor.execute('DELETE FROM videos WHERE id = ?', (video_id,))
-    conn.commit(); conn.close()
-    return redirect('/videos')
+    conn.commit()
+    conn.close()
+    return redirect(url_for('video_list'))
 
 if __name__ == '__main__':
     try:
