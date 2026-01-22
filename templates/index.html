@@ -1,17 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Picar-X 버튼 컨트롤러</title>
+    <title>Picar-X 정밀 컨트롤러</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; touch-action: manipulation; }
-        #video-feed { width: 100%; max-width: 600px; margin-top: 5px; border: 2px solid #333; }
+        #video-feed { 
+            width: 100%; max-width: 600px; margin-top: 5px; border: 2px solid #333; 
+            -webkit-touch-callout: none; -webkit-user-drag: none; 
+        }
         .ui-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px; }
         .control-panel { background: #222; padding: 10px; border-radius: 15px; }
-        
-        /* 버튼 디자인 */
         .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 180px; margin: 0 auto; }
-        .btn { padding: 20px 0; background: #444; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; user-select: none; }
+        
+        .btn { 
+            padding: 20px 0; background: #444; color: white; border: none; border-radius: 8px; 
+            font-weight: bold; cursor: pointer; 
+            -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none;
+            -moz-user-select: none; -ms-user-select: none; user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
         .btn:active { background: #888; }
         .btn-center { background: #555; }
         .btn-rec { background: #900; grid-column: span 3; margin-top: 10px; padding: 10px; }
@@ -55,24 +63,4 @@
     </div>
 
     <script>
-        document.getElementById('video-feed').src = "http://" + window.location.hostname + ":9000/mjpg";
-
-        function sendMove(cmd) {
-            fetch(`/move?cmd=${cmd}`);
-        }
-
-        function sendCam(cmd) {
-            fetch(`/camera?cmd=${cmd}`);
-        }
-
-        let isRecording = false;
-        function toggleRecord() {
-            isRecording = !isRecording;
-            const btn = document.getElementById('recBtn');
-            btn.innerText = isRecording ? "REC STOP" : "REC START";
-            btn.style.background = isRecording ? "#444" : "#900";
-            fetch(`/record?status=${isRecording ? 'start' : 'stop'}`);
-        }
-    </script>
-</body>
-</html>
+        document.getElementById('video-feed').src = "http://" + window
