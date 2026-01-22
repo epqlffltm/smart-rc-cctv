@@ -20,6 +20,7 @@ WORKDIR /app
 
 #RUN git clone https://github.com/sunfounder/vilib.git && \
 #    cd vilib && python3 setup.py install && cd .. && rm -rf vilib
+RUN pip install --no-cache-dir git+https://github.com/sunfounder/robot-hat.git
 RUN pip install --no-cache-dir git+https://github.com/sunfounder/picar-x.git
 RUN pip install --no-cache-dir git+https://github.com/sunfounder/vilib.git
 
