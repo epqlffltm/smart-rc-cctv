@@ -34,7 +34,8 @@
                 <td>{{ video.filesize_mb }} MB</td>
                 <td>{{ video.created_at }}</td>
                 <td>
-                    <a href="/download/{{ video.filename }}" class="btn btn-play" download>저장/재생</a>
+                    <a href="/download/{{ video.filename }}" class="btn btn-play" target="_blank">재생</a>
+                    <a href="/download/{{ video.filename }}" class="btn btn-save" download>다운로드</a>
                     <a href="/delete/{{ video.id }}" class="btn btn-del" onclick="return confirm('정말 삭제할까요?')">삭제</a>
                 </td>
             </tr>
