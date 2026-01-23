@@ -6,6 +6,7 @@ from time import strftime, localtime, sleep
 import sqlite3
 import subprocess
 import threading
+import time
 
 app = Flask(__name__)
 px = Picarx()
@@ -52,21 +53,30 @@ def auto_pilot_loop():
     SafeDistance = 40
     DangerDistance = 20
 
+    print("Auto Pilot Thread is Running...", flush=True)
+
     while True:
         if auto_mode:
-            # 1. 낭떠러지 감지 (최우선순위)
+            # 1. 낭떠러지 감지
             gm_val_list = px.get_grayscale_data()
             gm_state = px.get_cliff_status(gm_val_list)
+            
+            # 2. 장애물 거리 측정
+            distance = round(px.ultrasonic.read(), 2)
 
-            if gm_state:  # 낭떠러지 감지됨 (danger)
+            # [중요] 실시간 로그 출력 - 이제 터미널에 센서 값이 보일 겁니다!
+            print(f"Mode: AUTO | Cliff: {gm_state} | Dist: {distance}cm | Raw: {gm_val_list}", flush=True)
+
+            # 1순위: 낭떠러지 회피 로직
+            if gm_state:  
+                print("!!! CLIFF DETECTED - BACKING UP !!!", flush=True)
                 px.stop()
                 px.backward(80)
                 sleep(0.3)
                 px.stop()
-                continue
+                continue # 아래 장애물 로직을 타지 않고 다시 위로 올라감
 
-            # 2. 장애물 회피
-            distance = round(px.ultrasonic.read(), 2)
+            # 2순위: 장애물 회피 로직
             if distance >= SafeDistance:
                 px.set_dir_servo_angle(0)
                 px.forward(POWER)
@@ -74,7 +84,8 @@ def auto_pilot_loop():
                 px.set_dir_servo_angle(30)
                 px.forward(POWER)
                 sleep(0.1)
-            else: # 아주 가까운 경우
+            else: 
+                print("!!! OBSTACLE TOO CLOSE - BACKING UP !!!", flush=True)
                 px.set_dir_servo_angle(-30)
                 px.backward(POWER)
                 sleep(0.5)
