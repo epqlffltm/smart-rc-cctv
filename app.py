@@ -65,7 +65,7 @@ def auto_pilot_loop():
             distance = round(px.ultrasonic.read(), 2)
             
             if distance < 0:
-                print("⚠️ Sensor Error: Reading -1. Ignoring...", flush=True)
+                print(" Sensor Error: Reading -1. Ignoring...", flush=True)
                 px.stop() # 잠시 멈추거나
                 sleep(0.1)
                 continue # 이번 루프는 건너뛰고 다시 측정
