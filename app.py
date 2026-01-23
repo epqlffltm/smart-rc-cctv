@@ -58,17 +58,20 @@ def auto_pilot_loop():
     while True:
         if auto_mode:
             # 1. 낭떠러지 감지
+            sleep(0.05)  # 센서 안정화 대기
+            distance = px.ultrasonic.read()
             gm_val_list = px.get_grayscale_data()
             gm_state = px.get_cliff_status(gm_val_list)
             
             # 2. 장애물 거리 측정
             distance = round(px.ultrasonic.read(), 2)
             
-            if distance < 0:
+            if distance == -1:
                 print(" Sensor Error: Reading -1. Ignoring...", flush=True)
-                px.stop() # 잠시 멈추거나
+                #px.stop() # 잠시 멈추거나
                 sleep(0.1)
-                continue # 이번 루프는 건너뛰고 다시 측정
+                distance = px.ultrasonic.read()
+                #continue # 이번 루프는 건너뛰고 다시 측정
 
             print(f"Mode: AUTO | Cliff: {gm_state} | Dist: {distance}cm | Raw: {gm_val_list}", flush=True)
 
