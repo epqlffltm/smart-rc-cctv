@@ -63,8 +63,13 @@ def auto_pilot_loop():
             
             # 2. 장애물 거리 측정
             distance = round(px.ultrasonic.read(), 2)
+            
+            if distance < 0:
+                print("⚠️ Sensor Error: Reading -1. Ignoring...", flush=True)
+                px.stop() # 잠시 멈추거나
+                sleep(0.1)
+                continue # 이번 루프는 건너뛰고 다시 측정
 
-            # [중요] 실시간 로그 출력 - 이제 터미널에 센서 값이 보일 겁니다!
             print(f"Mode: AUTO | Cliff: {gm_state} | Dist: {distance}cm | Raw: {gm_val_list}", flush=True)
 
             # 1순위: 낭떠러지 회피 로직
