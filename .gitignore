@@ -21,3 +21,9 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+#도커 금지
+# Docker
+.docker/
+docker-data/
+*.tar
