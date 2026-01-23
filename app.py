@@ -25,7 +25,7 @@ try:
     Vilib.camera_start(vflip=False, hflip=False, size=(1920, 1080))
     Vilib.display(local=False, web=True)
 except Exception as e:
-    print(f"카메라 시작 실패: {e}")
+    print(f"카메라 연결 오류: {e}")
 
 # DB 초기화
 def init_db():
