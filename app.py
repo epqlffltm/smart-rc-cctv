@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
 from picarx import Picarx
 from vilib import Vilib
-import os
+import os 
+import getpass # 사용자 계정 추출용 추가
 from time import strftime, localtime, sleep
 import sqlite3
 import subprocess
@@ -16,7 +17,19 @@ audio_proc = None
 current_pan = 0
 current_tilt = 0
 auto_mode = False  # 스마트 모드 활성화 여부
-SAVE_PATH = "/media/epqlffltm/storage/PIcarX_Video/"
+
+# [수정] 사용자 아이디를 자동으로 추출하여 경로 설정
+USER_ID = getpass.getuser()
+SAVE_PATH = f"/media/{USER_ID}/storage/PIcarX_Video/"
+
+# [보완] 경로가 존재하지 않을 경우 자동 생성 시도
+if not os.path.exists(SAVE_PATH):
+    try:
+        os.makedirs(SAVE_PATH, exist_ok=True)
+    except:
+        # 외장하드 경로 실패 시 홈 디렉토리로 우회 (안전장치)
+        SAVE_PATH = f"/home/{USER_ID}/picarx_videos/"
+        os.makedirs(SAVE_PATH, exist_ok=True)
 
 # 낭떠러지 감지 기준값 설정
 px.set_cliff_reference([200, 200, 200])
@@ -57,34 +70,26 @@ def auto_pilot_loop():
 
     while True:
         if auto_mode:
-            # 1. 낭떠러지 감지
-            sleep(0.05)  # 센서 안정화 대기
-            distance = px.ultrasonic.read()
+            sleep(0.05)  
             gm_val_list = px.get_grayscale_data()
             gm_state = px.get_cliff_status(gm_val_list)
-            
-            # 2. 장애물 거리 측정
             distance = round(px.ultrasonic.read(), 2)
             
             if distance == -1:
-                print(" Sensor Error: Reading -1. Ignoring...", flush=True)
-                #px.stop() # 잠시 멈추거나
+                print("Sensor Error: Reading -1. Ignoring...", flush=True)
                 sleep(0.1)
                 distance = px.ultrasonic.read()
-                #continue # 이번 루프는 건너뛰고 다시 측정
 
             print(f"Mode: AUTO | Cliff: {gm_state} | Dist: {distance}cm | Raw: {gm_val_list}", flush=True)
 
-            # 1순위: 낭떠러지 회피 로직
             if gm_state:  
                 print("!!! CLIFF DETECTED - BACKING UP !!!", flush=True)
                 px.stop()
                 px.backward(80)
                 sleep(0.3)
                 px.stop()
-                continue # 아래 장애물 로직을 타지 않고 다시 위로 올라감
+                continue 
 
-            # 2순위: 장애물 회피 로직
             if distance >= SafeDistance:
                 px.set_dir_servo_angle(0)
                 px.forward(POWER)
@@ -100,7 +105,6 @@ def auto_pilot_loop():
         
         sleep(0.1)
 
-# 백그라운드 스레드 시작
 threading.Thread(target=auto_pilot_loop, daemon=True).start()
 
 # --- Flask 라우트 ---
@@ -151,9 +155,6 @@ def record():
     status = request.args.get('status')
     
     if status == 'start':
-        if not os.path.exists(SAVE_PATH):
-            os.makedirs(SAVE_PATH, exist_ok=True)
-        
         v_name = strftime("%Y-%m-%d-%H.%M.%S", localtime())
         Vilib.rec_video_set["path"] = SAVE_PATH
         Vilib.rec_video_set["name"] = v_name
@@ -163,6 +164,7 @@ def record():
         Vilib.rec_video_start()
         
         audio_temp = os.path.join(SAVE_PATH, f"{v_name}.wav")
+        # 오디오 캡처 시작 (사운드카드 번호 재확인 필요할 수 있음)
         audio_proc = subprocess.Popen([
             'arecord', '-D', 'plughw:4,0', '-f', 'S16_LE', '-r', '44100', '-c', '1', '-t', 'wav', audio_temp
         ])
@@ -178,22 +180,38 @@ def record():
         a_path = os.path.join(SAVE_PATH, v_name + ".wav")
         final_mp4 = os.path.join(SAVE_PATH, v_name + ".mp4")
         
-        sleep(2)
+        # [보완] 파일이 완전히 닫힐 때까지 충분히 대기 (Invalid data 에러 방지)
+        sleep(2.5) 
+        
+        # [보완] 두 파일이 모두 존재할 때만 ffmpeg 실행
         if os.path.exists(v_path) and os.path.exists(a_path):
-            subprocess.run([
-                'ffmpeg', '-y', '-i', v_path, '-i', a_path,
-                '-af', 'volume=2.0,aresample=async=1',
-                '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
-                '-c:a', 'aac', '-shortest', final_mp4
-            ])
-            os.remove(v_path); os.remove(a_path)
-            
-            fsize = round(os.getsize(final_mp4) / (1024 * 1024), 2)
-            db_time = strftime("%Y-%m-%d %H:%M:%S", localtime())
-            conn = sqlite3.connect('picarx.db')
-            conn.execute('INSERT INTO videos (filename, filepath, filesize_mb, created_at) VALUES (?,?,?,?)', (os.path.basename(final_mp4), final_mp4, fsize, db_time))
-            conn.commit(); conn.close()
-            
+            try:
+                subprocess.run([
+                    'ffmpeg', '-y', '-i', v_path, '-i', a_path,
+                    '-af', 'volume=2.0,aresample=async=1',
+                    '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+                    '-c:a', 'aac', '-shortest', final_mp4
+                ], check=True)
+                
+                # 원본 삭제
+                if os.path.exists(v_path): os.remove(v_path)
+                if os.path.exists(a_path): os.remove(a_path)
+                
+                # [수정] os.getsize -> os.path.getsize로 정정
+                if os.path.exists(final_mp4):
+                    fsize = round(os.path.getsize(final_mp4) / (1024 * 1024), 2)
+                    db_time = strftime("%Y-%m-%d %H:%M:%S", localtime())
+                    
+                    conn = sqlite3.connect('picarx.db')
+                    conn.execute('INSERT INTO videos (filename, filepath, filesize_mb, created_at) VALUES (?,?,?,?)', 
+                                (os.path.basename(final_mp4), final_mp4, fsize, db_time))
+                    conn.commit(); conn.close()
+                    print(f"녹화 성공: {final_mp4} ({fsize}MB)")
+                
+            except Exception as e:
+                print(f"인코딩 에러 발생: {e}")
+                return jsonify(status="error", message="Encoding failed")
+                
         return jsonify(status="stopped")
 
 @app.route('/videos')
@@ -217,7 +235,9 @@ def delete_video(video_id):
     conn = sqlite3.connect('picarx.db')
     cursor = conn.cursor()
     row = cursor.execute('SELECT filepath FROM videos WHERE id = ?', (video_id,)).fetchone()
-    if row and os.path.exists(row[0]): os.remove(row[0])
+    if row and os.path.exists(row[0]): 
+        try: os.remove(row[0])
+        except: pass
     cursor.execute('DELETE FROM videos WHERE id = ?', (video_id,))
     conn.commit(); conn.close()
     return redirect(url_for('video_list'))
