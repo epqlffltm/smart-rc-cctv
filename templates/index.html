@@ -1,34 +1,59 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-    <title>Picar-X CCTV Pro</title>
+    <meta charset="UTF-8">
+    <title>Picar-X CCTV Pro Control Center</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; touch-action: manipulation; }
-        #video-feed { width: 100%; max-width: 800px; border-bottom: 3px solid #333; }
-        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; }
-        .card { background: #222; padding: 15px; border-radius: 12px; }
-        .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 150px; margin: 0 auto; }
-        .btn { padding: 15px 0; background: #444; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .btn:active { background: #777; }
-        .btn-rec { background: #900; width: 100%; margin-top: 15px; }
-        .btn-auto { background: #0056b3; width: 100%; margin-bottom: 10px; }
-        .btn-link { background: #28a745; width: 95%; padding: 15px; margin-top: 10px; display: inline-block; text-decoration: none; color: white; font-weight: bold; border-radius: 8px; }
+        /* 기본 테마 및 레이아웃 */
+        body { text-align: center; font-family: 'Segoe UI', sans-serif; background: #111; color: white; margin: 0; touch-action: manipulation; }
+        #video-feed { width: 100%; max-width: 800px; border-bottom: 3px solid #333; background: #000; }
+        
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 15px; max-width: 1000px; margin: 0 auto; }
+        .card { background: #222; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h3 { margin-top: 0; color: #aaa; font-size: 1.1em; letter-spacing: 1px; }
+
+        /* 조종 D-Pad 스타일 */
+        .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 180px; margin: 0 auto; }
+        .btn { padding: 18px 0; background: #333; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; -webkit-tap-highlight-color: transparent; }
+        .btn:active { background: #555; transform: scale(0.95); }
+        
+        /* 기능별 버튼 색상 */
+        .btn-auto { background: #0056b3; width: 100%; margin-bottom: 15px; font-size: 1em; }
+        .btn-rec { background: #900; width: 100%; margin-top: 20px; font-size: 1em; }
+        .btn-link { background: #28a745; width: 90%; padding: 15px; margin: 20px auto; display: block; text-decoration: none; color: white; font-weight: bold; border-radius: 10px; transition: 0.3s; }
+        .btn-link:hover { background: #218838; }
+
+        /* 화면 녹화 제어 및 상태 표시 */
+        .controls { background: #1a1a1a; padding: 20px; border-top: 1px solid #333; }
+        #rec-status { font-size: 1em; color: #ff4444; font-weight: bold; margin-bottom: 10px; display: none; }
+        .recording-dot { width: 12px; height: 12px; background-color: #ff0000; border-radius: 50%; display: inline-block; animation: blink 1s infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+
+        .btn-screen { background-color: #28a745; color: white; padding: 12px 25px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-stop { background-color: #dc3545; color: white; padding: 12px 25px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; display: none; }
     </style>
 </head>
 <body>
-    <img id="video-feed" src="">
+
+    <img id="video-feed" src="" alt="Live Stream Offline">
+
     <div class="grid-container">
         <div class="card">
-            <h3>DRIVE</h3>
+            <h3>DRIVE CONTROL</h3>
             <div class="d-pad">
-                <div></div><button class="btn" onmousedown="move('forward')" onmouseup="move('stop')" ontouchstart="move('forward')" ontouchend="move('stop')">▲</button><div></div>
+                <div></div>
+                <button class="btn" onmousedown="move('forward')" onmouseup="move('stop')" ontouchstart="move('forward')" ontouchend="move('stop')">▲</button>
+                <div></div>
                 <button class="btn" onmousedown="move('left')" onmouseup="move('stop')" ontouchstart="move('left')" ontouchend="move('stop')">◀</button>
                 <button class="btn" onclick="move('stop')">■</button>
                 <button class="btn" onmousedown="move('right')" onmouseup="move('stop')" ontouchstart="move('right')" ontouchend="move('stop')">▶</button>
-                <div></div><button class="btn" onmousedown="move('backward')" onmouseup="move('stop')" ontouchstart="move('backward')" ontouchend="move('stop')">▼</button><div></div>
+                <div></div>
+                <button class="btn" onmousedown="move('backward')" onmouseup="move('stop')" ontouchstart="move('backward')" ontouchend="move('stop')">▼</button>
+                <div></div>
             </div>
         </div>
+
         <div class="card">
             <h3>SMART & CAM</h3>
             <button id="autoBtn" class="btn btn-auto" onclick="toggleAuto()">SMART MODE: OFF</button>
@@ -39,16 +64,27 @@
                 <button class="btn" onclick="cam('right')">R</button>
                 <div></div><button class="btn" onclick="cam('down')">D</button><div></div>
             </div>
-            <button id="recBtn" class="btn btn-rec" onclick="toggleRecord()">REC START</button>
+            <button id="recBtn" class="btn btn-rec" onclick="toggleRecord()">🔴 SERVER REC START</button>
         </div>
     </div>
-    <a href="/videos" class="btn-link">📂 1.4TB 영상 보관함 (재생/다운로드)</a>
+
+    <a href="/videos" class="btn-link"> 1.4TB 영상 보관함 방문 (재생/다운로드)</a>
+
+    <div class="controls">
+        <div id="rec-status"><span class="recording-dot"></span> 화면 녹화 중...</div>
+        <button id="screenRecordBtn" class="btn-screen" onclick="startScreenRecord()">🖥️ 현재 화면 녹화 시작</button>
+        <button id="stopRecordBtn" class="btn-stop" onclick="stopScreenRecord()">⏹ 녹화 중지 및 저장</button>
+    </div>
 
     <script>
+        // 스트리밍 서버 주소 설정
         document.getElementById('video-feed').src = "http://" + window.location.hostname + ":9000/mjpg";
+
+        // 기본 제어 함수
         function move(c) { fetch(`/move?cmd=${c}`); }
         function cam(c) { fetch(`/camera?cmd=${c}`); }
         
+        // 스마트 모드 토글
         let autoOn = false;
         function toggleAuto() {
             autoOn = !autoOn;
@@ -58,13 +94,68 @@
             fetch(`/auto_mode?status=${autoOn ? 'on' : 'off'}`);
         }
 
+        // 서버 사이드 녹화 토글 (Picar-X 본체 저장)
         let recOn = false;
         function toggleRecord() {
             recOn = !recOn;
             const b = document.getElementById('recBtn');
-            b.innerText = recOn ? "REC STOP" : "REC START";
+            b.innerText = recOn ? "🔴 STOP RECORDING" : "🔴 SERVER REC START";
             b.style.background = recOn ? "#444" : "#900";
             fetch(`/record?status=${recOn ? 'start' : 'stop'}`);
+        }
+
+        /* 브라우저 화면 녹화 로직 (클라이언트 사이드) */
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        async function startScreenRecord() {
+            try {
+                // 화면 캡처 권한 요청
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: "always" },
+                    audio: false
+                });
+
+                // 레코더 설정 (VP9 코덱 사용)
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) recordedChunks.push(e.data);
+                };
+
+                // 녹화 종료 시 파일 생성 및 다운로드
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `picar-x-dash-${new Date().getTime()}.webm`;
+                    a.click();
+                    recordedChunks = [];
+                    
+                    document.getElementById('screenRecordBtn').style.display = 'inline-block';
+                    document.getElementById('stopRecordBtn').style.display = 'none';
+                    document.getElementById('rec-status').style.display = 'none';
+                };
+
+                mediaRecorder.start();
+                
+                // UI 업데이트 (깜빡이는 점 표시)
+                document.getElementById('rec-status').style.display = 'block';
+                document.getElementById('screenRecordBtn').style.display = 'none';
+                document.getElementById('stopRecordBtn').style.display = 'inline-block';
+
+            } catch (err) {
+                console.error("화면 녹화 에러: " + err);
+                alert("녹화를 시작할 수 없습니다. (권한 거부 등)");
+            }
+        }
+
+        function stopScreenRecord() {
+            if(mediaRecorder) {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
         }
     </script>
 </body>
