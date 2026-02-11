@@ -466,6 +466,7 @@ python3 app.py
 
 ## 🎬 시연 영상 및 스크린샷
 
+<<<<<<< HEAD
 ### 실시간 대시보드
 ![Dashboard](docs/screenshots/dashboard.png)
 - 좌측: 1080p 실시간 스트리밍
@@ -714,3 +715,7 @@ MIT License - 자유롭게 사용, 수정, 배포 가능
 <p align="center">
   Made with ❤️ by Kim Jin Hyung
 </p>
+=======
+## 가장 어려웠던 점
+* hat이 다 막혀있고, 예제코드와 주어진 드라이버뿐이라서, 역공학을 통해 재설계를 한 것.
+>>>>>>> e6b17fb16e6ef9b9f57a406b13b01621d3606599
