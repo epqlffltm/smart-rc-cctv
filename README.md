@@ -467,19 +467,19 @@ python3 app.py
 ## 🎬 시연 영상 및 스크린샷
 
 ### 실시간 대시보드
-![Dashboard](media\dashboard.mp4)
+![Dashboard](media\dashboard.gif)
 - 좌측: 1080p 실시간 스트리밍
 - 우측: 방향키 조종 패널
 - 하단: 자율주행 ON/OFF 토글
 
 ### 자율주행 모드
-![Auto Mode](media\auto_mode.mp4)
+![Auto Mode](media\auto_mode.gif)
 - 장애물 감지 → 회피
 - 낭떠러지 감지 → 후진
 - 정상 주행 → 직진
 
 ### 녹화 파일 관리
-![Video Archive](docs/screenshots/videos.png)
+![Video Archive] //(docs/screenshots/videos.png)
 - SQLite 기반 메타데이터
 - 파일명, 크기, 날짜 자동 기록
 - 원클릭 재생/삭제
